@@ -340,8 +340,15 @@ class MainActivity : AppCompatActivity() {
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
         summaryCard.addView(summary)
+        val chartRange = TextView(this).apply {
+            textSize = baseTextSize - 2f
+            setTextColor(palette.secondaryText)
+            setPadding(0, dp(10), 0, dp(2))
+        }
+        summaryCard.addView(chartRange)
         val chart = AdherenceChartView(this, palette, baseTextSize - 3f).apply {
             layoutParams = LinearLayout.LayoutParams(-1, dp(210))
+            onVisibleRangeChanged = { range -> chartRange.text = range }
         }
         summaryCard.addView(chart)
 
@@ -354,7 +361,7 @@ class MainActivity : AppCompatActivity() {
         addLegendItem(legend, "Omitidas", palette.danger, baseTextSize - 3f, palette)
         summaryCard.addView(legend)
         content.addView(TextView(this).apply {
-            text = "En la vista de 30 días, desliza el gráfico para recorrer las fechas."
+            text = "En la vista de 30 días, desliza el gráfico para ver otros días."
             textSize = baseTextSize - 3f
             setTextColor(palette.secondaryText)
             gravity = Gravity.CENTER

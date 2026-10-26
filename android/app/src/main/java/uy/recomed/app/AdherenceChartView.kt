@@ -24,6 +24,7 @@ internal class AdherenceChartView(
     private var days = emptyList<AdherenceDay>()
     private var firstVisibleIndex = 0
     private var touchStartX = 0f
+    var onVisibleRangeChanged: ((String) -> Unit)? = null
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = palette.secondaryText
         textSize = textSize * resources.displayMetrics.density * resources.configuration.fontScale
@@ -46,7 +47,8 @@ internal class AdherenceChartView(
 
     fun updateDays(days: List<AdherenceDay>) {
         this.days = days
-        firstVisibleIndex = (days.size - VISIBLE_DAYS).coerceAtLeast(0)
+        firstVisibleIndex = (days.size - visibleDaysCount()).coerceAtLeast(0)
+        notifyVisibleRange()
         invalidate()
     }
 
@@ -59,12 +61,14 @@ internal class AdherenceChartView(
             MotionEvent.ACTION_UP -> {
                 val deltaX = event.x - touchStartX
                 if (kotlin.math.abs(deltaX) > 48f * resources.displayMetrics.density) {
-                    val maxFirstIndex = (days.size - VISIBLE_DAYS).coerceAtLeast(0)
+                    val pageSize = visibleDaysCount()
+                    val maxFirstIndex = (days.size - pageSize).coerceAtLeast(0)
                     firstVisibleIndex = if (deltaX < 0) {
-                        (firstVisibleIndex + VISIBLE_DAYS).coerceAtMost(maxFirstIndex)
+                        (firstVisibleIndex + pageSize).coerceAtMost(maxFirstIndex)
                     } else {
-                        (firstVisibleIndex - VISIBLE_DAYS).coerceAtLeast(0)
+                        (firstVisibleIndex - pageSize).coerceAtLeast(0)
                     }
+                    notifyVisibleRange()
                     invalidate()
                 }
                 performClick()
@@ -80,10 +84,26 @@ internal class AdherenceChartView(
         return true
     }
 
+    private fun visibleDaysCount() =
+        if (days.size <= WEEK_DAYS) days.size else PAGE_DAYS
+
+    private fun notifyVisibleRange() {
+        val visibleDays = days.drop(firstVisibleIndex).take(visibleDaysCount())
+        val first = visibleDays.firstOrNull()?.date ?: return
+        val last = visibleDays.last().date
+        val formatter = DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("es"))
+        val range = if (first == last) {
+            first.format(formatter)
+        } else {
+            "${first.format(formatter)} – ${last.format(formatter)}"
+        }
+        onVisibleRangeChanged?.invoke("Mostrando $range")
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (days.isEmpty()) return
-        val visibleDays = days.drop(firstVisibleIndex).take(VISIBLE_DAYS)
+        val visibleDays = days.drop(firstVisibleIndex).take(visibleDaysCount())
         if (visibleDays.isEmpty()) return
 
         val density = resources.displayMetrics.density
@@ -135,17 +155,18 @@ internal class AdherenceChartView(
                     )
                 }
             }
-            val label = if (days.size <= VISIBLE_DAYS) {
+            val label = if (days.size <= WEEK_DAYS) {
                 day.date.format(DateTimeFormatter.ofPattern("EE", Locale.forLanguageTag("es")))
                     .replaceFirstChar { it.titlecase(Locale.forLanguageTag("es")) }
             } else {
-                "${day.date.dayOfMonth}/${day.date.monthValue}"
+                day.date.dayOfMonth.toString()
             }
             canvas.drawText(label, x, baseline + labelArea * 0.68f, labelPaint)
         }
     }
 
     companion object {
-        private const val VISIBLE_DAYS = 7
+        private const val WEEK_DAYS = 7
+        private const val PAGE_DAYS = 5
     }
 }
