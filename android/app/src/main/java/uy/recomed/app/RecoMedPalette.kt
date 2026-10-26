@@ -38,4 +38,11 @@ internal data class RecoMedPalette(
             )
         }
     }
+
+}
+
+internal fun appBaseTextSize(fontSize: String): Float = when (fontSize) {
+    "Grande" -> 19f
+    "Extra Grande" -> 22f
+    else -> 16f
 }

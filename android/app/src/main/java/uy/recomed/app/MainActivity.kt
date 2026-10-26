@@ -8,6 +8,7 @@ import android.app.AlarmManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
@@ -19,6 +20,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -27,11 +29,21 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import java.time.LocalDate
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
+    companion object {
+        private const val STATE_SELECTED_TAB = "selected_tab"
+        private const val KEY_SELECTED_TAB = "selected_tab"
+    }
+
     private lateinit var root: LinearLayout
     private lateinit var list: LinearLayout
+    private lateinit var pageContainer: FrameLayout
+    private lateinit var bottomNavigation: LinearLayout
+    private val pages = mutableListOf<ScrollView>()
+    private val navigationItems = mutableListOf<TextView>()
     private var selectedHour = 8
     private var selectedMinute = 0
     private var selectedIcon = "Tableta"
@@ -45,6 +57,11 @@ class MainActivity : AppCompatActivity() {
     private var lastFont = ""
     private var currentFilter = "Todos"
     private lateinit var filterButton: Button
+    private var selectedTab = 0
+    private var trackingPeriodDays = 7
+    private var swipeStartX = 0f
+    private var swipeStartY = 0f
+    private lateinit var trackingPeriodButtons: List<Button>
 
     private val filterOptions = listOf("Todos", "Diario", "Mañana", "Tarde", "Noche", "Tratamiento 7 días")
 
@@ -74,12 +91,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        recreate()
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        selectedTab = savedInstanceState?.getInt(STATE_SELECTED_TAB)
+            ?: getSharedPreferences("recomed_prefs", MODE_PRIVATE).getInt(KEY_SELECTED_TAB, 0)
 
         val prefs = getSharedPreferences("recomed_prefs", MODE_PRIVATE)
         val savedTheme = prefs.getString("theme", "Sistema (Automático)") ?: "Sistema (Automático)"
@@ -96,6 +111,29 @@ class MainActivity : AppCompatActivity() {
         showExactAlarmInfoIfNeeded()
         buildScreen()
         renderMedicines()
+        if (selectedTab == 1) renderTracking()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt(STATE_SELECTED_TAB, selectedTab)
+        super.onSaveInstanceState(outState)
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                swipeStartX = event.x
+                swipeStartY = event.y
+            }
+            MotionEvent.ACTION_UP -> {
+                val deltaX = event.x - swipeStartX
+                val deltaY = event.y - swipeStartY
+                if (kotlin.math.abs(deltaX) > dp(72) && kotlin.math.abs(deltaX) > kotlin.math.abs(deltaY) * 1.3f) {
+                    selectTab((selectedTab + if (deltaX < 0) 1 else -1).coerceIn(0, 2))
+                }
+            }
+        }
+        return super.dispatchTouchEvent(event)
     }
 
     override fun onResume() {
@@ -112,6 +150,7 @@ class MainActivity : AppCompatActivity() {
         }
         buildScreen()
         renderMedicines()
+        if (selectedTab == 1) renderTracking()
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -148,14 +187,333 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun buildBottomNavigation(palette: RecoMedPalette, baseTextSize: Float): LinearLayout {
+        navigationItems.clear()
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setBackgroundColor(palette.surface)
+            elevation = dp(8).toFloat()
+            listOf("▦\nTratamientos", "▤\nSeguimiento", "⚙\nAjustes").forEachIndexed { index, label ->
+                val item = TextView(this@MainActivity).apply {
+                    text = label
+                    textSize = (baseTextSize - 4f).coerceAtLeast(12f)
+                    gravity = Gravity.CENTER
+                    maxLines = 2
+                    setPadding(dp(4), dp(8), dp(4), dp(8))
+                    minHeight = dp(56)
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { selectTab(index) }
+                }
+                navigationItems.add(item)
+                addView(item, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    setMargins(dp(3), 0, dp(3), 0)
+                })
+            }
+        }
+    }
+
+    private fun updateBottomNavigation(palette: RecoMedPalette) {
+        navigationItems.forEachIndexed { index, item ->
+            val selected = index == selectedTab
+            item.background = createRoundedBackground(
+                if (selected) palette.accentSoft else Color.TRANSPARENT,
+                14
+            )
+            item.setTextColor(if (selected) palette.accent else palette.secondaryText)
+            item.contentDescription = when (index) {
+                0 -> "Pestaña Tratamientos"
+                1 -> "Pestaña Seguimiento"
+                else -> "Pestaña Ajustes"
+            }
+            item.isSelected = selected
+        }
+    }
+
+    private fun selectTab(index: Int) {
+        if (index !in pages.indices) return
+        selectedTab = index
+        pages.forEachIndexed { pageIndex, page ->
+            page.visibility = if (pageIndex == selectedTab) View.VISIBLE else View.GONE
+        }
+        getSharedPreferences("recomed_prefs", MODE_PRIVATE)
+            .edit().putInt(KEY_SELECTED_TAB, selectedTab).apply()
+        updateBottomNavigation(RecoMedPalette.forMode(isDarkMode()))
+        if (selectedTab == 1) renderTracking()
+    }
+
+    private fun isDarkMode() =
+        (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+    private fun buildTrackingPage(
+        palette: RecoMedPalette,
+        baseTextSize: Float,
+        expandedText: Boolean
+    ): ScrollView {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(24), dp(20), dp(24))
+        }
+        content.addView(TextView(this).apply {
+            text = "Seguimiento"
+            textSize = baseTextSize + 7f
+            setTextColor(palette.primaryText)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        })
+        content.addView(TextView(this).apply {
+            text = "Revisa las dosis que registraste como tomadas u omitidas."
+            textSize = baseTextSize
+            setTextColor(palette.secondaryText)
+            setPadding(0, dp(6), 0, dp(18))
+        })
+
+        val periodSelector = LinearLayout(this).apply {
+            orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        }
+        trackingPeriodButtons = listOf(7 to "Últimos 7 días", 30 to "Últimos 30 días").map { (days, label) ->
+            val button = Button(this).apply {
+                text = label
+                isAllCaps = false
+                textSize = baseTextSize - 2f
+                setOnClickListener {
+                    trackingPeriodDays = days
+                    renderTracking()
+                }
+            }
+            val params = if (expandedText) {
+                LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) }
+            } else {
+                LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    if (days == 7) rightMargin = dp(6) else leftMargin = dp(6)
+                }
+            }
+            periodSelector.addView(button, params)
+            button
+        }
+        content.addView(periodSelector)
+
+        val summaryCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(16))
+            background = createCardBackground(palette.surface, palette.border)
+        }
+        content.addView(summaryCard, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(14)
+        })
+        val summary = TextView(this).apply {
+            textSize = baseTextSize + 1f
+            setTextColor(palette.primaryText)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+        summaryCard.addView(summary)
+        val chart = AdherenceChartView(this, palette, baseTextSize - 3f).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, dp(210))
+        }
+        summaryCard.addView(chart)
+
+        val legend = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, 0)
+        }
+        addLegendItem(legend, "Tomadas", palette.accent, baseTextSize - 3f, palette)
+        addLegendItem(legend, "Omitidas", palette.danger, baseTextSize - 3f, palette)
+        summaryCard.addView(legend)
+
+        val note = TextView(this).apply {
+            text = "El gráfico cuenta solo las dosis que registraste. RecoMed no marca dosis omitidas automáticamente; si no registras una dosis, no se incluye en el resumen."
+            textSize = baseTextSize - 2f
+            setTextColor(palette.secondaryText)
+            setPadding(0, dp(18), 0, dp(8))
+        }
+        content.addView(note)
+        return ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            addView(content)
+        }.also {
+            trackingSummary = summary
+            trackingChart = chart
+        }
+    }
+
+    private fun addLegendItem(
+        container: LinearLayout,
+        label: String,
+        color: Int,
+        textSize: Float,
+        palette: RecoMedPalette
+    ) {
+        val item = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+        }
+        item.addView(View(this).apply {
+            background = createRoundedBackground(color, 4)
+            layoutParams = LinearLayout.LayoutParams(dp(12), dp(12)).apply {
+                rightMargin = dp(6)
+            }
+        })
+        item.addView(TextView(this).apply {
+            text = label
+            this.textSize = textSize
+            setTextColor(palette.secondaryText)
+        })
+        container.addView(item)
+    }
+
+    private lateinit var trackingSummary: TextView
+    private lateinit var trackingChart: AdherenceChartView
+
+    private fun renderTracking() {
+        if (!::trackingSummary.isInitialized || !::trackingChart.isInitialized) return
+        val today = LocalDate.now()
+        val firstDay = today.minusDays((trackingPeriodDays - 1).toLong())
+        val records = DoseRecordStore.get(this).filter {
+            val date = runCatching { LocalDate.parse(it.date) }.getOrNull()
+            date != null && date >= firstDay && date <= today
+        }
+        val taken = records.count { it.status == DoseRecord.Status.TAKEN }
+        val missed = records.count { it.status == DoseRecord.Status.MISSED }
+        val total = taken + missed
+        val percentage = if (total == 0) 0 else (taken * 100 / total)
+        val palette = RecoMedPalette.forMode(isDarkMode())
+        trackingPeriodButtons.forEachIndexed { index, button ->
+            val selected = (index == 0 && trackingPeriodDays == 7) || (index == 1 && trackingPeriodDays == 30)
+            button.background = createRoundedBackground(
+                if (selected) palette.accent else palette.accentSoft,
+                12
+            )
+            button.setTextColor(
+                if (selected && !isDarkMode()) Color.WHITE
+                else if (selected) 0xFF10221D.toInt()
+                else palette.primaryText
+            )
+        }
+        trackingSummary.text = if (total == 0) {
+            "Todavía no hay dosis registradas en este período."
+        } else {
+            "$percentage% tomadas  ·  $taken tomadas  ·  $missed omitidas"
+        }
+        val byDate = records.groupBy { LocalDate.parse(it.date) }
+        trackingChart.updateDays((0 until trackingPeriodDays).map { offset ->
+            val date = firstDay.plusDays(offset.toLong())
+            val dailyRecords = byDate[date].orEmpty()
+            AdherenceDay(
+                date = date,
+                taken = dailyRecords.count { it.status == DoseRecord.Status.TAKEN },
+                missed = dailyRecords.count { it.status == DoseRecord.Status.MISSED }
+            )
+        })
+        trackingChart.contentDescription =
+            "Gráfico de los últimos $trackingPeriodDays días: $taken dosis tomadas y $missed omitidas"
+    }
+
+    private fun buildSettingsPage(
+        palette: RecoMedPalette,
+        baseTextSize: Float,
+        expandedText: Boolean
+    ): ScrollView {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(24), dp(20), dp(28))
+        }
+        content.addView(TextView(this).apply {
+            text = "Ajustes"
+            textSize = baseTextSize + 7f
+            setTextColor(palette.primaryText)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        })
+        content.addView(TextView(this).apply {
+            text = "Personaliza la apariencia y la lectura de RecoMed."
+            textSize = baseTextSize
+            setTextColor(palette.secondaryText)
+            setPadding(0, dp(6), 0, dp(20))
+        })
+
+        fun addSettingGroup(title: String, options: List<Pair<String, String>>, selected: String, action: (String) -> Unit) {
+            content.addView(TextView(this).apply {
+                text = title
+                textSize = baseTextSize + 1f
+                setTextColor(palette.primaryText)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setPadding(0, dp(18), 0, dp(8))
+            })
+            val row = LinearLayout(this).apply {
+                orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            }
+            options.forEachIndexed { index, (value, label) ->
+                val button = Button(this).apply {
+                    text = label
+                    isAllCaps = false
+                    textSize = baseTextSize - 2f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    background = createRoundedBackground(
+                        if (value == selected) palette.accent else palette.accentSoft,
+                        12
+                    )
+                    setTextColor(
+                        if (value == selected && !isDarkMode()) Color.WHITE
+                        else if (value == selected) 0xFF10221D.toInt()
+                        else palette.primaryText
+                    )
+                    addClickAnimation()
+                    setOnClickListener { action(value) }
+                }
+                val params = if (expandedText) {
+                    LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) }
+                } else {
+                    LinearLayout.LayoutParams(0, -2, 1f).apply {
+                        if (index > 0) leftMargin = dp(5)
+                        if (index < options.lastIndex) rightMargin = dp(5)
+                    }
+                }
+                row.addView(button, params)
+            }
+            content.addView(row)
+        }
+
+        val preferences = getSharedPreferences("recomed_prefs", MODE_PRIVATE)
+        val currentTheme = preferences.getString("theme", "Sistema (Automático)") ?: "Sistema (Automático)"
+        addSettingGroup(
+            "Tema",
+            listOf(
+                "Sistema (Automático)" to "Sistema",
+                "Modo Claro" to "Claro",
+                "Modo Oscuro" to "Oscuro"
+            ),
+            currentTheme
+        ) { theme ->
+            preferences.edit().putString("theme", theme).apply()
+            when (theme) {
+                "Modo Claro" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+                "Modo Oscuro" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+                else -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+            }
+        }
+
+        val currentFont = preferences.getString("font_size", "Normal") ?: "Normal"
+        addSettingGroup(
+            "Tamaño del texto",
+            listOf("Normal" to "Normal", "Grande" to "Grande", "Extra Grande" to "Extra grande"),
+            currentFont
+        ) { font ->
+            preferences.edit().putString("font_size", font).apply()
+            recreate()
+        }
+        return ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            addView(content)
+        }
+    }
+
     private fun buildScreen() {
         val prefs = getSharedPreferences("recomed_prefs", MODE_PRIVATE)
         val fontScaleSetting = prefs.getString("font_size", "Normal") ?: "Normal"
-        val baseTextSize = when (fontScaleSetting) {
-            "Grande" -> 19f
-            "Extra Grande" -> 22f
-            else -> 16f
-        }
+        val baseTextSize = appBaseTextSize(fontScaleSetting)
+        val expandedText = fontScaleSetting == "Extra Grande"
 
         val isDarkMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val palette = RecoMedPalette.forMode(isDarkMode)
@@ -184,10 +542,10 @@ class MainActivity : AppCompatActivity() {
         val activeAlarmName = prefs.getString("active_alarm_name", null)
         if (activeAlarmId != -1 && activeAlarmName != null) {
             val alarmBanner = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
+                orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
                 setPadding(dp(16), dp(14), dp(16), dp(14))
                 background = createRoundedBackground(palette.danger, 18)
-                gravity = Gravity.CENTER_VERTICAL
+                gravity = if (expandedText) Gravity.START else Gravity.CENTER_VERTICAL
                 elevation = dp(2).toFloat()
             }
             val alarmText = TextView(this).apply {
@@ -195,15 +553,24 @@ class MainActivity : AppCompatActivity() {
                 textSize = baseTextSize
                 setTextColor(onBrandColor)
                 setTypeface(null, android.graphics.Typeface.BOLD)
-                layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                layoutParams = LinearLayout.LayoutParams(
+                    if (expandedText) -1 else 0,
+                    -2,
+                    if (expandedText) 0f else 1f
+                ).apply {
+                    if (expandedText) bottomMargin = dp(10)
+                }
             }
             val stopAlarmButton = Button(this).apply {
                 text = "🛑 Detener Alarma"
+                isAllCaps = false
                 textSize = baseTextSize - 2f
                 setTextColor(palette.danger)
                 background = createRoundedBackground(palette.surface, 12)
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 setPadding(dp(12), dp(6), dp(12), dp(6))
+                maxLines = 2
+                if (expandedText) layoutParams = LinearLayout.LayoutParams(-1, -2)
                 addClickAnimation()
                 setOnClickListener {
                     val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -280,23 +647,8 @@ class MainActivity : AppCompatActivity() {
         brandTitleLayout.addView(brandNameLayout)
         brandTitleLayout.addView(taglineText)
 
-        val settingsButton = Button(this).apply {
-            text = "Ajustes"
-            isAllCaps = false
-            textSize = baseTextSize - 2f
-            setTextColor(onBrandColor)
-            background = createRoundedBackground(brandColor, 10)
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setPadding(dp(14), dp(6), dp(14), dp(6))
-            addClickAnimation()
-            setOnClickListener {
-                settingsLauncher.launch(Intent(this@MainActivity, SettingsActivity::class.java))
-            }
-        }
-
         topRow.addView(logoImageView)
         topRow.addView(brandTitleLayout)
-        topRow.addView(settingsButton)
         heroCard.addView(topRow)
 
         // --- ACTION BUTTONS (FILTER & ADD) ---
@@ -336,8 +688,16 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { showAddDialog() }
         }
 
-        actionsLayout.addView(filterButton, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) })
-        actionsLayout.addView(addButton, LinearLayout.LayoutParams(0, -2, 1.2f))
+        if (expandedText) {
+            actionsLayout.orientation = LinearLayout.VERTICAL
+            actionsLayout.addView(filterButton, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(8)
+            })
+            actionsLayout.addView(addButton, LinearLayout.LayoutParams(-1, -2))
+        } else {
+            actionsLayout.addView(filterButton, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(8) })
+            actionsLayout.addView(addButton, LinearLayout.LayoutParams(0, -2, 1.2f))
+        }
         heroCard.addView(actionsLayout)
 
         // --- SECTION HEADING ---
@@ -365,8 +725,21 @@ class MainActivity : AppCompatActivity() {
         content.addView(list)
         content.addView(note)
         scroll.addView(content)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        pages.clear()
+        pages.add(scroll)
+        pages.add(buildTrackingPage(palette, baseTextSize, expandedText))
+        pages.add(buildSettingsPage(palette, baseTextSize, expandedText))
+        pageContainer = FrameLayout(this)
+        pages.forEachIndexed { index, page ->
+            page.visibility = if (index == selectedTab) View.VISIBLE else View.GONE
+            pageContainer.addView(page, FrameLayout.LayoutParams(-1, -1))
+        }
+        bottomNavigation = buildBottomNavigation(palette, baseTextSize)
+        root.addView(pageContainer, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(bottomNavigation, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
+        updateBottomNavigation(palette)
     }
 
     private fun renderMedicines() {
@@ -377,11 +750,8 @@ class MainActivity : AppCompatActivity() {
             .sortedWith(compareBy<Medicine> { it.hour }.thenBy { it.minute })
 
         val fontScaleSetting = getSharedPreferences("recomed_prefs", MODE_PRIVATE).getString("font_size", "Normal") ?: "Normal"
-        val baseTextSize = when (fontScaleSetting) {
-            "Grande" -> 19f
-            "Extra Grande" -> 22f
-            else -> 16f
-        }
+        val baseTextSize = appBaseTextSize(fontScaleSetting)
+        val expandedText = fontScaleSetting == "Extra Grande"
 
         val isDarkMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val palette = RecoMedPalette.forMode(isDarkMode)
@@ -423,8 +793,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             val topRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+                orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+                gravity = if (expandedText) Gravity.START else Gravity.CENTER_VERTICAL
             }
 
             val iconBadge = TextView(this).apply {
@@ -438,7 +808,7 @@ class MainActivity : AppCompatActivity() {
 
             val titleLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), 0, 0, 0)
+                setPadding(if (expandedText) 0 else dp(12), if (expandedText) dp(8) else 0, 0, 0)
             }
 
             val titleView = TextView(this).apply {
@@ -460,7 +830,11 @@ class MainActivity : AppCompatActivity() {
             titleLayout.addView(routineTag)
 
             topRow.addView(iconBadge)
-            topRow.addView(titleLayout, LinearLayout.LayoutParams(0, -2, 1f))
+            topRow.addView(
+                titleLayout,
+                if (expandedText) LinearLayout.LayoutParams(-1, -2)
+                else LinearLayout.LayoutParams(0, -2, 1f)
+            )
             card.addView(topRow)
 
             val time = String.format(Locale.getDefault(), "%02d:%02d", medicine.hour, medicine.minute)
@@ -473,6 +847,71 @@ class MainActivity : AppCompatActivity() {
             }
             card.addView(timeView)
 
+            val today = LocalDate.now()
+            val todayRecord = DoseRecordStore.find(this, medicine.id, today)
+            val statusText = TextView(this).apply {
+                text = when (todayRecord?.status) {
+                    DoseRecord.Status.TAKEN -> "Hoy: marcada como tomada"
+                    DoseRecord.Status.MISSED -> "Hoy: marcada como omitida"
+                    null -> "¿Qué pasó con la dosis de hoy?"
+                }
+                textSize = baseTextSize - 1f
+                setTextColor(
+                    when (todayRecord?.status) {
+                        DoseRecord.Status.TAKEN -> palette.accent
+                        DoseRecord.Status.MISSED -> palette.danger
+                        null -> descColor
+                    }
+                )
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setPadding(0, dp(4), 0, dp(8))
+            }
+            card.addView(statusText)
+
+            val doseActions = LinearLayout(this).apply {
+                orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            }
+            fun doseAction(label: String, status: DoseRecord.Status, color: Int, softColor: Int): Button =
+                Button(this).apply {
+                    text = label
+                    isAllCaps = false
+                    textSize = baseTextSize - 2f
+                    maxLines = 2
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setTextColor(if (todayRecord?.status == status) Color.WHITE else color)
+                    background = createRoundedBackground(
+                        if (todayRecord?.status == status) color else softColor,
+                        12
+                    )
+                    setOnClickListener {
+                        DoseRecordStore.record(this@MainActivity, medicine.id, medicine.name, today, status)
+                        renderMedicines()
+                        renderTracking()
+                        val message = if (status == DoseRecord.Status.TAKEN) {
+                            "Dosis registrada como tomada"
+                        } else {
+                            "Dosis registrada como omitida"
+                        }
+                        Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            val takenButton = doseAction("✓ Tomada", DoseRecord.Status.TAKEN, palette.accent, palette.accentSoft)
+            val missedButton = doseAction("Omitida", DoseRecord.Status.MISSED, palette.danger, palette.dangerSoft)
+            if (expandedText) {
+                doseActions.addView(takenButton, LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(6)
+                })
+                doseActions.addView(missedButton, LinearLayout.LayoutParams(-1, -2))
+            } else {
+                doseActions.addView(takenButton, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    rightMargin = dp(5)
+                })
+                doseActions.addView(missedButton, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    leftMargin = dp(5)
+                })
+            }
+            card.addView(doseActions)
+
             val divider = View(this).apply {
                 layoutParams = LinearLayout.LayoutParams(-1, dp(1)).apply { setMargins(0, dp(4), 0, dp(8)) }
                 setBackgroundColor(palette.border)
@@ -480,8 +919,8 @@ class MainActivity : AppCompatActivity() {
             card.addView(divider)
 
             val actions = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+                orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+                gravity = if (expandedText) Gravity.START else Gravity.CENTER_VERTICAL
             }
 
             val enabled = CheckBox(this).apply {
@@ -526,8 +965,15 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            actions.addView(enabled, LinearLayout.LayoutParams(0, -2, 1f))
-            actions.addView(delete)
+            if (expandedText) {
+                actions.addView(enabled, LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(8)
+                })
+                actions.addView(delete, LinearLayout.LayoutParams(-1, -2))
+            } else {
+                actions.addView(enabled, LinearLayout.LayoutParams(0, -2, 1f))
+                actions.addView(delete)
+            }
             card.addView(actions)
 
             val params = LinearLayout.LayoutParams(-1, -2)
@@ -538,6 +984,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun showAddDialog() {
         customAudioUri = ""
+        val fontScaleSetting = getSharedPreferences("recomed_prefs", MODE_PRIVATE)
+            .getString("font_size", "Normal") ?: "Normal"
+        val baseTextSize = appBaseTextSize(fontScaleSetting)
+        val expandedText = fontScaleSetting == "Extra Grande"
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(12), dp(22), dp(12))
@@ -545,17 +995,24 @@ class MainActivity : AppCompatActivity() {
 
         val name = EditText(this).apply {
             hint = "Nombre del medicamento o tratamiento"
-            isSingleLine = true
+            isSingleLine = false
+            maxLines = 2
+            textSize = baseTextSize
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
         val dose = EditText(this).apply {
             hint = "Dosis (ej. 1 tableta, 5ml, 1 cápsula)"
-            isSingleLine = true
+            isSingleLine = false
+            maxLines = 2
+            textSize = baseTextSize
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
 
         val timeButton = Button(this).apply {
             text = String.format(Locale.getDefault(), "🕒 Horario de toma: %02d:%02d", selectedHour, selectedMinute)
+            isAllCaps = false
+            textSize = baseTextSize
+            maxLines = 2
             setTypeface(null, android.graphics.Typeface.BOLD)
             addClickAnimation()
             setOnClickListener {
@@ -569,33 +1026,49 @@ class MainActivity : AppCompatActivity() {
 
         val iconLabel = TextView(this).apply {
             text = "Formato farmacéutico:"
+            textSize = baseTextSize
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, dp(12), 0, dp(6))
         }
         val iconLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
         }
         icons.forEach { ic ->
             val btn = Button(this).apply {
-                text = ic.take(3)
-                textSize = 11f
+                text = ic
+                isAllCaps = false
+                textSize = baseTextSize - 2f
                 setTypeface(null, android.graphics.Typeface.BOLD)
+                maxLines = 2
                 addClickAnimation()
                 setOnClickListener {
                     selectedIcon = ic
                     Toast.makeText(this@MainActivity, "Formato: $ic", Toast.LENGTH_SHORT).show()
                 }
             }
-            iconLayout.addView(btn, LinearLayout.LayoutParams(0, dp(40), 1f).apply { setMargins(2, 0, 2, 0) })
+            val iconParams = if (expandedText) {
+                LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(6)
+                }
+            } else {
+                LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    setMargins(dp(2), 0, dp(2), 0)
+                }
+            }
+            iconLayout.addView(btn, iconParams)
         }
 
         val routineLabel = TextView(this).apply {
             text = "Rutina clínica:"
+            textSize = baseTextSize
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, dp(12), 0, dp(6))
         }
         val routineButton = Button(this).apply {
             text = "Rutina: $selectedRoutine"
+            isAllCaps = false
+            textSize = baseTextSize
+            maxLines = 2
             setTypeface(null, android.graphics.Typeface.BOLD)
             addClickAnimation()
             setOnClickListener {
@@ -610,6 +1083,9 @@ class MainActivity : AppCompatActivity() {
 
         val toneButton = Button(this).apply {
             text = "Tono de alarma estándar"
+            isAllCaps = false
+            textSize = baseTextSize
+            maxLines = 2
             setTypeface(null, android.graphics.Typeface.BOLD)
             addClickAnimation()
             setOnClickListener {
@@ -625,13 +1101,16 @@ class MainActivity : AppCompatActivity() {
 
         customToneStatusView = TextView(this).apply {
             text = "Ningún archivo de audio multimedia vinculado"
-            textSize = 12f
+            textSize = baseTextSize - 3f
             setTextColor(0xFF64748B.toInt())
             setPadding(0, dp(6), 0, dp(6))
         }
 
         val customAudioButton = Button(this).apply {
             text = "📁 Vincular audio personalizado"
+            isAllCaps = false
+            textSize = baseTextSize
+            maxLines = 2
             setTypeface(null, android.graphics.Typeface.BOLD)
             addClickAnimation()
             setOnClickListener {
@@ -642,6 +1121,7 @@ class MainActivity : AppCompatActivity() {
         // --- COLOR SELECTOR WITH COLOR SQUARES (NO COLOR NAMES) ---
         val colorLabel = TextView(this).apply {
             text = "Color identificativo:"
+            textSize = baseTextSize
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, dp(12), 0, dp(6))
         }
@@ -680,9 +1160,18 @@ class MainActivity : AppCompatActivity() {
         panel.addView(colorLabel)
         panel.addView(colorLayout)
 
+        val panelScroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(panel)
+            layoutParams = LinearLayout.LayoutParams(
+                -1,
+                minOf(dp(560), (resources.displayMetrics.heightPixels * 0.68f).toInt())
+            )
+        }
+
         AlertDialog.Builder(this)
             .setTitle("Programar Nuevo Tratamiento")
-            .setView(panel)
+            .setView(panelScroll)
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Guardar", null)
             .create().also { dialog ->

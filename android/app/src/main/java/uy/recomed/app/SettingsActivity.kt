@@ -37,11 +37,8 @@ class SettingsActivity : AppCompatActivity() {
         selectedFont = prefs.getString("font_size", "Normal") ?: "Normal"
 
         val fontScaleSetting = prefs.getString("font_size", "Normal") ?: "Normal"
-        val baseTextSize = when (fontScaleSetting) {
-            "Grande" -> 19f
-            "Extra Grande" -> 22f
-            else -> 16f
-        }
+        val baseTextSize = appBaseTextSize(fontScaleSetting)
+        val expandedText = fontScaleSetting == "Extra Grande"
 
         val isDarkMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val palette = RecoMedPalette.forMode(isDarkMode)
@@ -75,7 +72,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val themeLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
@@ -116,9 +113,16 @@ class SettingsActivity : AppCompatActivity() {
         val btnParams = LinearLayout.LayoutParams(0, -2, 1f).apply {
             setMargins(dp(4), 0, dp(4), 0)
         }
-        themeLayout.addView(themeSystemBtn, btnParams)
-        themeLayout.addView(themeLightBtn, btnParams)
-        themeLayout.addView(themeDarkBtn, btnParams)
+        fun selectionButtonParams() = if (expandedText) {
+            LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(8)
+            }
+        } else {
+            LinearLayout.LayoutParams(btnParams)
+        }
+        themeLayout.addView(themeSystemBtn, selectionButtonParams())
+        themeLayout.addView(themeLightBtn, selectionButtonParams())
+        themeLayout.addView(themeDarkBtn, selectionButtonParams())
 
         // --- SECCIÓN TAMAÑO DE FUENTE ---
         val fontLabel = TextView(this).apply {
@@ -130,7 +134,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val fontLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
@@ -159,9 +163,9 @@ class SettingsActivity : AppCompatActivity() {
             setOnClickListener { updateFontSelection("Extra Grande") }
         }
 
-        fontLayout.addView(fontNormalBtn, btnParams)
-        fontLayout.addView(fontLargeBtn, btnParams)
-        fontLayout.addView(fontXLargeBtn, btnParams)
+        fontLayout.addView(fontNormalBtn, selectionButtonParams())
+        fontLayout.addView(fontLargeBtn, selectionButtonParams())
+        fontLayout.addView(fontXLargeBtn, selectionButtonParams())
 
         // --- BOTÓN GUARDAR ---
         val saveButton = Button(this).apply {
@@ -190,7 +194,7 @@ class SettingsActivity : AppCompatActivity() {
         content.addView(themeLayout)
         content.addView(fontLabel)
         content.addView(fontLayout)
-        content.addView(android.widget.Space(this).apply { layoutParams = LinearLayout.LayoutParams(0, 50) })
+        content.addView(android.widget.Space(this).apply { layoutParams = LinearLayout.LayoutParams(0, dp(32)) })
         content.addView(saveButton, LinearLayout.LayoutParams(-1, -2))
 
         scroll.addView(content)
