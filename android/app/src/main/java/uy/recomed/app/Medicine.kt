@@ -9,7 +9,7 @@ data class Medicine(
     val hour: Int,
     val minute: Int,
     val enabled: Boolean = true,
-    val icon: String = "💊", // 💊 Pastilla, 🧪 Jarabe, 💉 Inyección, 💧 Gotas, 💨 Inhalador
+    val icon: String = "Tableta",
     val color: Int = 0xFF176B5B.toInt(), // Color de tarjeta / acento
     val routine: String = "Diario", // "Mañana", "Tarde", "Noche", "Diario"
     val frequency: String = "Cada 24 horas",
@@ -39,7 +39,14 @@ data class Medicine(
             hour = json.optInt("hour"),
             minute = json.optInt("minute"),
             enabled = json.optBoolean("enabled", true),
-            icon = json.optString("icon", "💊"),
+            icon = when (val savedIcon = json.optString("icon", "Tableta")) {
+                "💊" -> "Tableta"
+                "🧪" -> "Jarabe"
+                "💉" -> "Inyección"
+                "💧" -> "Gotas"
+                "💨" -> "Inhalador"
+                else -> savedIcon
+            },
             color = json.optInt("color", 0xFF176B5B.toInt()),
             routine = json.optString("routine", "Diario"),
             frequency = json.optString("frequency", "Cada 24 horas"),

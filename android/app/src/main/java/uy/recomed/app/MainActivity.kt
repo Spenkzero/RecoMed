@@ -50,9 +50,6 @@ class MainActivity : AppCompatActivity() {
     private var selectedIcon = "Tableta"
     private var selectedColor = 0xFF176B5B.toInt()
     private var selectedRoutine = "Diario"
-    private var selectedTone = "default"
-    private var customAudioUri: String = ""
-    private lateinit var customToneStatusView: TextView
 
     private var lastTheme = ""
     private var lastFont = ""
@@ -62,7 +59,9 @@ class MainActivity : AppCompatActivity() {
     private var trackingPeriodDays = 7
     private var swipeStartX = 0f
     private var swipeStartY = 0f
+    private var swipeStartedOnChart = false
     private lateinit var trackingPeriodButtons: List<Button>
+    private var settingsAudioStatusView: TextView? = null
 
     private val filterOptions = listOf("Todos", "Diario", "Mañana", "Tarde", "Noche", "Tratamiento 7 días")
 
@@ -75,22 +74,23 @@ class MainActivity : AppCompatActivity() {
         Pair("Rojo", 0xFFC0392B.toInt())
     )
     private val routines = listOf("Diario", "Mañana", "Tarde", "Noche", "Tratamiento 7 días")
-    private val tones = listOf(
-        Pair("Alarma predeterminada", "default"),
-        Pair("Notificación suave", "suave"),
-        Pair("Alarma de alta prioridad", "urgente")
-    )
-
-    private val audioPickerLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            runCatching {
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    private val settingsAudioPickerLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            if (uri != null) {
+                try {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    getSharedPreferences("recomed_prefs", MODE_PRIVATE).edit()
+                        .putString("notification_sound", "custom")
+                        .putString("notification_custom_uri", uri.toString())
+                        .apply()
+                    settingsAudioStatusView?.text = "Tono personalizado seleccionado"
+                    recreate()
+                } catch (error: SecurityException) {
+                    android.util.Log.e("RecoMed", "No se pudo guardar el permiso del tono seleccionado", error)
+                    Toast.makeText(this, "No se pudo acceder al archivo de audio", Toast.LENGTH_LONG).show()
+                }
             }
-            customAudioUri = uri.toString()
-            customToneStatusView.text = "✓ Audio multimedia vinculado correctamente"
-            Toast.makeText(this, "Audio multimedia seleccionado", Toast.LENGTH_SHORT).show()
         }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,11 +125,23 @@ class MainActivity : AppCompatActivity() {
             MotionEvent.ACTION_DOWN -> {
                 swipeStartX = event.x
                 swipeStartY = event.y
+                swipeStartedOnChart = if (::trackingChart.isInitialized) {
+                    val location = IntArray(2)
+                    trackingChart.getLocationOnScreen(location)
+                    event.rawX >= location[0] &&
+                        event.rawX <= location[0] + trackingChart.width &&
+                        event.rawY >= location[1] &&
+                        event.rawY <= location[1] + trackingChart.height
+                } else {
+                    false
+                }
             }
             MotionEvent.ACTION_UP -> {
                 val deltaX = event.x - swipeStartX
                 val deltaY = event.y - swipeStartY
-                if (kotlin.math.abs(deltaX) > dp(72) && kotlin.math.abs(deltaX) > kotlin.math.abs(deltaY) * 1.3f) {
+                if (!swipeStartedOnChart &&
+                    kotlin.math.abs(deltaX) > dp(72) &&
+                    kotlin.math.abs(deltaX) > kotlin.math.abs(deltaY) * 1.3f) {
                     selectTab(
                         (selectedTab + if (deltaX < 0) 1 else -1).coerceIn(0, 2),
                         animateTransition = true
@@ -199,7 +211,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(8), dp(8), dp(8), dp(8))
             setBackgroundColor(palette.surface)
             elevation = dp(8).toFloat()
-            listOf("▦\nTratamientos", "▤\nSeguimiento", "⚙\nAjustes").forEachIndexed { index, label ->
+            listOf("Tratamientos", "Seguimiento", "Ajustes").forEachIndexed { index, label ->
                 val item = TextView(this@MainActivity).apply {
                     text = label
                     textSize = (baseTextSize - 4f).coerceAtLeast(12f)
@@ -343,6 +355,13 @@ class MainActivity : AppCompatActivity() {
         addLegendItem(legend, "Tomadas", palette.accent, baseTextSize - 3f, palette)
         addLegendItem(legend, "Omitidas", palette.danger, baseTextSize - 3f, palette)
         summaryCard.addView(legend)
+        content.addView(TextView(this).apply {
+            text = "En la vista de 30 días, desliza el gráfico para recorrer las fechas."
+            textSize = baseTextSize - 3f
+            setTextColor(palette.secondaryText)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, 0)
+        })
 
         val note = TextView(this).apply {
             text = "El gráfico cuenta solo las dosis que registraste. RecoMed no marca dosis omitidas automáticamente; si no registras una dosis, no se incluye en el resumen."
@@ -430,7 +449,8 @@ class MainActivity : AppCompatActivity() {
             )
         })
         trackingChart.contentDescription =
-            "Gráfico de los últimos $trackingPeriodDays días: $taken dosis tomadas y $missed omitidas"
+            "Gráfico de los últimos $trackingPeriodDays días: $taken dosis tomadas y $missed omitidas. " +
+                "Desliza horizontalmente para recorrer los días."
     }
 
     private fun buildSettingsPage(
@@ -463,8 +483,9 @@ class MainActivity : AppCompatActivity() {
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 setPadding(0, dp(18), 0, dp(8))
             })
+            val verticalOptions = expandedText || options.size > 3
             val row = LinearLayout(this).apply {
-                orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+                orientation = if (verticalOptions) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             }
             options.forEachIndexed { index, (value, label) ->
                 val button = Button(this).apply {
@@ -484,7 +505,7 @@ class MainActivity : AppCompatActivity() {
                     addClickAnimation()
                     setOnClickListener { action(value) }
                 }
-                val params = if (expandedText) {
+                val params = if (verticalOptions) {
                     LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) }
                 } else {
                     LinearLayout.LayoutParams(0, -2, 1f).apply {
@@ -523,6 +544,63 @@ class MainActivity : AppCompatActivity() {
             currentFont
         ) { font ->
             preferences.edit().putString("font_size", font).apply()
+            recreate()
+        }
+
+        val currentSound = preferences.getString("notification_sound", "default") ?: "default"
+        addSettingGroup(
+            "Sonido de los recordatorios",
+            listOf(
+                "default" to "Alarma",
+                "soft" to "Suave",
+                "intense" to "Intenso",
+                "custom" to "Personalizado",
+                "silent" to "Sin sonido"
+            ),
+            currentSound
+        ) { sound ->
+            if (sound == "custom") {
+                settingsAudioPickerLauncher.launch(arrayOf("audio/*"))
+            } else {
+                preferences.edit().putString("notification_sound", sound).apply()
+                recreate()
+            }
+        }
+        val customUri = preferences.getString("notification_custom_uri", null)
+        settingsAudioStatusView = TextView(this).apply {
+            text = if (customUri.isNullOrBlank()) {
+                "No hay un archivo de audio personalizado seleccionado."
+            } else {
+                "Tono personalizado seleccionado."
+            }
+            textSize = baseTextSize - 2f
+            setTextColor(palette.secondaryText)
+            setPadding(0, dp(6), 0, dp(4))
+        }
+        content.addView(settingsAudioStatusView)
+        val chooseAudioButton = Button(this).apply {
+            text = "Elegir archivo de audio"
+            isAllCaps = false
+            textSize = baseTextSize - 2f
+            setTextColor(palette.primaryText)
+            background = createRoundedBackground(palette.accentSoft, 12)
+            addClickAnimation()
+            setOnClickListener { settingsAudioPickerLauncher.launch(arrayOf("audio/*")) }
+        }
+        content.addView(chooseAudioButton, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(6)
+        })
+        addSettingGroup(
+            "Vibración",
+            listOf(
+                "standard" to "Estándar",
+                "soft" to "Suave",
+                "long" to "Larga",
+                "off" to "Desactivada"
+            ),
+            preferences.getString("notification_vibration", "standard") ?: "standard"
+        ) { vibration ->
+            preferences.edit().putString("notification_vibration", vibration).apply()
             recreate()
         }
         return ScrollView(this).apply {
@@ -571,7 +649,7 @@ class MainActivity : AppCompatActivity() {
                 elevation = dp(2).toFloat()
             }
             val alarmText = TextView(this).apply {
-                text = "🔔 Alarma Activa: $activeAlarmName"
+                text = "Alarma activa: $activeAlarmName"
                 textSize = baseTextSize
                 setTextColor(onBrandColor)
                 setTypeface(null, android.graphics.Typeface.BOLD)
@@ -584,7 +662,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             val stopAlarmButton = Button(this).apply {
-                text = "🛑 Detener Alarma"
+                text = "Detener alarma"
                 isAllCaps = false
                 textSize = baseTextSize - 2f
                 setTextColor(palette.danger)
@@ -911,7 +989,7 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
                     }
                 }
-            val takenButton = doseAction("✓ Tomada", DoseRecord.Status.TAKEN, palette.accent, palette.accentSoft)
+            val takenButton = doseAction("Tomada", DoseRecord.Status.TAKEN, palette.accent, palette.accentSoft)
             val missedButton = doseAction("Omitida", DoseRecord.Status.MISSED, palette.danger, palette.dangerSoft)
             if (expandedText) {
                 doseActions.addView(takenButton, LinearLayout.LayoutParams(-1, -2).apply {
@@ -937,6 +1015,18 @@ class MainActivity : AppCompatActivity() {
             val actions = LinearLayout(this).apply {
                 orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
                 gravity = if (expandedText) Gravity.START else Gravity.CENTER_VERTICAL
+            }
+
+            val edit = Button(this).apply {
+                text = "Editar tratamiento"
+                isAllCaps = false
+                textSize = baseTextSize - 2f
+                setTextColor(palette.accent)
+                background = createRoundedBackground(palette.accentSoft, 12)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                addClickAnimation()
+                setOnClickListener { showMedicineDialog(medicine) }
             }
 
             val enabled = CheckBox(this).apply {
@@ -982,13 +1072,20 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (expandedText) {
+                actions.addView(edit, LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(8)
+                })
                 actions.addView(enabled, LinearLayout.LayoutParams(-1, -2).apply {
                     bottomMargin = dp(8)
                 })
                 actions.addView(delete, LinearLayout.LayoutParams(-1, -2))
             } else {
                 actions.addView(enabled, LinearLayout.LayoutParams(0, -2, 1f))
-                actions.addView(delete)
+                actions.addView(edit, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    leftMargin = dp(4)
+                    rightMargin = dp(4)
+                })
+                actions.addView(delete, LinearLayout.LayoutParams(0, -2, 1f))
             }
             card.addView(actions)
 
@@ -1046,12 +1143,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             row.addView(TextView(this).apply {
-                text = if (selected) "✓" else "○"
+                text = if (selected) "Seleccionado" else ""
                 textSize = baseTextSize
                 setTextColor(if (selected) palette.accent else palette.secondaryText)
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 gravity = Gravity.CENTER
-            }, LinearLayout.LayoutParams(dp(28), -2).apply {
+            }, LinearLayout.LayoutParams(if (selected) dp(94) else dp(12), -2).apply {
                 rightMargin = dp(10)
             })
             row.addView(TextView(this).apply {
@@ -1069,15 +1166,22 @@ class MainActivity : AppCompatActivity() {
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
     }
 
-    private fun showAddDialog() {
-        customAudioUri = ""
+    private fun showAddDialog() = showMedicineDialog(null)
+
+    private fun showMedicineDialog(existingMedicine: Medicine?) {
+        selectedHour = existingMedicine?.hour ?: 8
+        selectedMinute = existingMedicine?.minute ?: 0
+        selectedIcon = existingMedicine?.icon ?: "Tableta"
+        selectedColor = existingMedicine?.color ?: colorOptions.first().second
+        selectedRoutine = existingMedicine?.routine ?: "Diario"
         val fontScaleSetting = getSharedPreferences("recomed_prefs", MODE_PRIVATE)
             .getString("font_size", "Normal") ?: "Normal"
         val baseTextSize = appBaseTextSize(fontScaleSetting)
         val expandedText = fontScaleSetting == "Extra Grande"
+        val palette = RecoMedPalette.forMode(isDarkMode())
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(12), dp(22), dp(12))
+            setPadding(dp(20), dp(8), dp(20), dp(12))
         }
 
         val name = EditText(this).apply {
@@ -1085,28 +1189,38 @@ class MainActivity : AppCompatActivity() {
             isSingleLine = false
             maxLines = 2
             textSize = baseTextSize
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setText(existingMedicine?.name.orEmpty())
+            setTextColor(palette.primaryText)
+            setHintTextColor(palette.secondaryText)
+            setPadding(dp(14), dp(13), dp(14), dp(13))
+            background = createCardBackground(palette.surface, palette.border, 14)
         }
         val dose = EditText(this).apply {
             hint = "Dosis (ej. 1 tableta, 5ml, 1 cápsula)"
             isSingleLine = false
             maxLines = 2
             textSize = baseTextSize
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setText(existingMedicine?.dose.orEmpty())
+            setTextColor(palette.primaryText)
+            setHintTextColor(palette.secondaryText)
+            setPadding(dp(14), dp(13), dp(14), dp(13))
+            background = createCardBackground(palette.surface, palette.border, 14)
         }
 
         val timeButton = Button(this).apply {
-            text = String.format(Locale.getDefault(), "🕒 Horario de toma: %02d:%02d", selectedHour, selectedMinute)
+            text = String.format(Locale.getDefault(), "Horario de toma: %02d:%02d", selectedHour, selectedMinute)
             isAllCaps = false
             textSize = baseTextSize
             maxLines = 2
+            setTextColor(palette.primaryText)
+            background = createRoundedBackground(palette.accentSoft, 14)
             setTypeface(null, android.graphics.Typeface.BOLD)
             addClickAnimation()
             setOnClickListener {
                 TimePickerDialog(this@MainActivity, { _, h, m ->
                     selectedHour = h
                     selectedMinute = m
-                    text = String.format(Locale.getDefault(), "🕒 Horario de toma: %02d:%02d", h, m)
+                    text = String.format(Locale.getDefault(), "Horario de toma: %02d:%02d", h, m)
                 }, selectedHour, selectedMinute, true).show()
             }
         }
@@ -1114,12 +1228,14 @@ class MainActivity : AppCompatActivity() {
         val iconLabel = TextView(this).apply {
             text = "Formato farmacéutico:"
             textSize = baseTextSize
+            setTextColor(palette.primaryText)
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, dp(12), 0, dp(6))
         }
         val iconLayout = LinearLayout(this).apply {
-            orientation = if (expandedText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            orientation = LinearLayout.HORIZONTAL
         }
+        val iconButtons = mutableListOf<Button>()
         icons.forEach { ic ->
             val btn = Button(this).apply {
                 text = ic
@@ -1127,35 +1243,50 @@ class MainActivity : AppCompatActivity() {
                 textSize = baseTextSize - 2f
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 maxLines = 2
+                setTextColor(if (ic == selectedIcon) palette.accent else palette.primaryText)
+                background = createCardBackground(
+                    if (ic == selectedIcon) palette.accentSoft else palette.surface,
+                    if (ic == selectedIcon) palette.accent else palette.border,
+                    12
+                )
+                iconButtons.add(this)
                 addClickAnimation()
                 setOnClickListener {
                     selectedIcon = ic
-                    Toast.makeText(this@MainActivity, "Formato: $ic", Toast.LENGTH_SHORT).show()
+                    iconButtons.forEach { button ->
+                        val selected = button.text.toString() == selectedIcon
+                        button.setTextColor(if (selected) palette.accent else palette.primaryText)
+                        button.background = createCardBackground(
+                            if (selected) palette.accentSoft else palette.surface,
+                            if (selected) palette.accent else palette.border,
+                            12
+                        )
+                    }
                 }
             }
-            val iconParams = if (expandedText) {
-                LinearLayout.LayoutParams(-1, -2).apply {
-                    bottomMargin = dp(6)
-                }
-            } else {
-                LinearLayout.LayoutParams(0, -2, 1f).apply {
-                    setMargins(dp(2), 0, dp(2), 0)
-                }
-            }
-            iconLayout.addView(btn, iconParams)
+            iconLayout.addView(btn, LinearLayout.LayoutParams(-2, -2).apply {
+                setMargins(0, 0, dp(7), 0)
+            })
+        }
+        val iconScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(iconLayout)
         }
 
         val routineLabel = TextView(this).apply {
             text = "Rutina clínica:"
             textSize = baseTextSize
+            setTextColor(palette.primaryText)
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, dp(12), 0, dp(6))
         }
         val routineButton = Button(this).apply {
-            text = "Rutina: $selectedRoutine"
+            text = selectedRoutine
             isAllCaps = false
             textSize = baseTextSize
             maxLines = 2
+            setTextColor(palette.primaryText)
+            background = createRoundedBackground(palette.accentSoft, 14)
             setTypeface(null, android.graphics.Typeface.BOLD)
             addClickAnimation()
             setOnClickListener {
@@ -1163,52 +1294,15 @@ class MainActivity : AppCompatActivity() {
                     .setTitle("Seleccionar rutina")
                     .setItems(routines.toTypedArray()) { _, which ->
                         selectedRoutine = routines[which]
-                        text = "Rutina: $selectedRoutine"
+                        text = selectedRoutine
                     }.show()
             }
         }
 
-        val toneButton = Button(this).apply {
-            text = "Tono de alarma estándar"
-            isAllCaps = false
-            textSize = baseTextSize
-            maxLines = 2
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            addClickAnimation()
-            setOnClickListener {
-                val toneNames = tones.map { it.first }.toTypedArray()
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Seleccionar tono")
-                    .setItems(toneNames) { _, which ->
-                        selectedTone = tones[which].second
-                        text = "Tono: ${toneNames[which]}"
-                    }.show()
-            }
-        }
-
-        customToneStatusView = TextView(this).apply {
-            text = "Ningún archivo de audio multimedia vinculado"
-            textSize = baseTextSize - 3f
-            setTextColor(0xFF64748B.toInt())
-            setPadding(0, dp(6), 0, dp(6))
-        }
-
-        val customAudioButton = Button(this).apply {
-            text = "📁 Vincular audio personalizado"
-            isAllCaps = false
-            textSize = baseTextSize
-            maxLines = 2
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            addClickAnimation()
-            setOnClickListener {
-                audioPickerLauncher.launch("audio/*")
-            }
-        }
-
-        // --- COLOR SELECTOR WITH COLOR SQUARES (NO COLOR NAMES) ---
         val colorLabel = TextView(this).apply {
             text = "Color identificativo:"
             textSize = baseTextSize
+            setTextColor(palette.primaryText)
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, dp(12), 0, dp(6))
         }
@@ -1218,32 +1312,55 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
         }
 
+        val colorSwatches = mutableListOf<Pair<Int, View>>()
         colorOptions.forEach { pair ->
             val colorVal = pair.second
             val colorSquare = View(this).apply {
-                background = createRoundedBackground(colorVal, 6)
+                background = createCardBackground(
+                    colorVal,
+                    if (colorVal == selectedColor) palette.accent else palette.surface,
+                    8
+                )
+                alpha = if (colorVal == selectedColor) 1f else 0.55f
                 layoutParams = LinearLayout.LayoutParams(dp(36), dp(36)).apply {
                     setMargins(0, 0, dp(8), 0)
                 }
+                colorSwatches.add(colorVal to this)
                 addClickAnimation()
                 setOnClickListener {
                     selectedColor = colorVal
-                    Toast.makeText(this@MainActivity, "Color seleccionado", Toast.LENGTH_SHORT).show()
+                    colorSwatches.forEach { (swatchColor, swatch) ->
+                        swatch.alpha = if (swatchColor == selectedColor) 1f else 0.55f
+                        swatch.background = createCardBackground(
+                            swatchColor,
+                            if (swatchColor == selectedColor) palette.accent else palette.surface,
+                            8
+                        )
+                    }
                 }
             }
             colorLayout.addView(colorSquare)
         }
 
-        panel.addView(name)
-        panel.addView(dose)
-        panel.addView(timeButton)
+        fun addFieldLabel(label: String) {
+            panel.addView(TextView(this).apply {
+                text = label
+                textSize = baseTextSize - 1f
+                setTextColor(palette.secondaryText)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setPadding(0, dp(12), 0, dp(6))
+            })
+        }
+        addFieldLabel("Nombre del tratamiento")
+        panel.addView(name, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+        addFieldLabel("Dosis o indicación (opcional)")
+        panel.addView(dose, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+        addFieldLabel("Horario")
+        panel.addView(timeButton, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(4) })
         panel.addView(iconLabel)
-        panel.addView(iconLayout)
+        panel.addView(iconScroll)
         panel.addView(routineLabel)
-        panel.addView(routineButton)
-        panel.addView(toneButton)
-        panel.addView(customToneStatusView)
-        panel.addView(customAudioButton)
+        panel.addView(routineButton, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(4) })
         panel.addView(colorLabel)
         panel.addView(colorLayout)
 
@@ -1257,7 +1374,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Programar Nuevo Tratamiento")
+            .setTitle(if (existingMedicine == null) "Añadir tratamiento" else "Editar tratamiento")
             .setView(panelScroll)
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Guardar", null)
@@ -1270,24 +1387,36 @@ class MainActivity : AppCompatActivity() {
                             return@setOnClickListener
                         }
                         val all = MedicineStore.get(this)
-                        val newId = (all.maxOfOrNull { it.id } ?: 100) + 1
-                        val medicine = Medicine(
-                            id = newId,
+                        val medicine = existingMedicine?.copy(
                             name = medicineName,
                             dose = dose.text.toString().trim(),
                             hour = selectedHour,
                             minute = selectedMinute,
                             icon = selectedIcon,
                             color = selectedColor,
-                            routine = selectedRoutine,
-                            alarmTone = selectedTone,
-                            customToneUri = customAudioUri
+                            routine = selectedRoutine
+                        ) ?: Medicine(
+                            id = (all.maxOfOrNull { it.id } ?: 100) + 1,
+                            name = medicineName,
+                            dose = dose.text.toString().trim(),
+                            hour = selectedHour,
+                            minute = selectedMinute,
+                            icon = selectedIcon,
+                            color = selectedColor,
+                            routine = selectedRoutine
                         )
-                        all.add(medicine)
+                        val existingIndex = all.indexOfFirst { it.id == medicine.id }
+                        if (existingIndex >= 0) all[existingIndex] = medicine else all.add(medicine)
                         MedicineStore.save(this, all)
-                        AlarmScheduler.schedule(this, medicine)
+                        AlarmScheduler.cancel(this, medicine.id)
+                        if (medicine.enabled) AlarmScheduler.schedule(this, medicine)
                         renderMedicines()
-                        Toast.makeText(this, "¡Tratamiento programado con éxito!", Toast.LENGTH_SHORT).show()
+                        val message = if (existingMedicine == null) {
+                            "Tratamiento programado"
+                        } else {
+                            "Cambios del tratamiento guardados"
+                        }
+                        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
                         dialog.dismiss()
                     }
                 }

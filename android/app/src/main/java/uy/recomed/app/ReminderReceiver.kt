@@ -25,20 +25,19 @@ class ReminderReceiver : BroadcastReceiver() {
 
         val name = intent.getStringExtra("name") ?: "Medicamento"
         val dose = intent.getStringExtra("dose") ?: ""
-        val alarmTone = intent.getStringExtra("alarmTone") ?: "default"
-        val customToneUri = intent.getStringExtra("customToneUri") ?: ""
-
+        val preferences = context.getSharedPreferences("recomed_prefs", Context.MODE_PRIVATE)
+        val soundMode = preferences.getString("notification_sound", "default") ?: "default"
+        val customToneUri = preferences.getString("notification_custom_uri", null).orEmpty()
+        val vibrationMode = preferences.getString("notification_vibration", "standard") ?: "standard"
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channelId = "recomed_reminders_v4"
+        val channelId = "recomed_reminders_v5_${soundMode}_${vibrationMode}_${customToneUri.hashCode()}"
 
-        val soundUri = if (customToneUri.isNotBlank()) {
-            runCatching { Uri.parse(customToneUri) }.getOrNull() ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-        } else {
-            when (alarmTone) {
-                "suave" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                "urgente" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-                else -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            }
+        val soundUri = when (soundMode) {
+            "soft" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            "intense" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            "custom" -> customToneUri.takeIf { it.isNotBlank() }?.let(Uri::parse)
+            "silent" -> null
+            else -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
         }
 
         val audioAttributes = AudioAttributes.Builder()
@@ -46,10 +45,17 @@ class ReminderReceiver : BroadcastReceiver() {
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
 
-        val channel = NotificationChannel(channelId, "Recordatorios Avanzados RecoMed", NotificationManager.IMPORTANCE_HIGH).apply {
+        val channel = NotificationChannel(channelId, "Recordatorios RecoMed", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Notificaciones con opción de detener alarma"
             setSound(soundUri, audioAttributes)
-            enableVibration(true)
+            val vibrationPattern = when (vibrationMode) {
+                "soft" -> longArrayOf(0, 120, 100, 120)
+                "long" -> longArrayOf(0, 500, 180, 500)
+                "off" -> null
+                else -> longArrayOf(0, 250, 150, 250)
+            }
+            enableVibration(vibrationPattern != null)
+            if (vibrationPattern != null) setVibrationPattern(vibrationPattern)
         }
         manager.createNotificationChannel(channel)
 
@@ -84,8 +90,7 @@ class ReminderReceiver : BroadcastReceiver() {
 
         manager.notify(id, notification)
 
-        context.getSharedPreferences("recomed_prefs", Context.MODE_PRIVATE)
-            .edit().putInt("active_alarm_id", id).putString("active_alarm_name", name).apply()
+        preferences.edit().putInt("active_alarm_id", id).putString("active_alarm_name", name).apply()
 
         val medicine = MedicineStore.get(context).firstOrNull { it.id == id && it.enabled }
         if (medicine != null) AlarmScheduler.schedule(context, medicine)
