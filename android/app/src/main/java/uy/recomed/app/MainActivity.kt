@@ -688,14 +688,7 @@ class MainActivity : AppCompatActivity() {
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             addClickAnimation()
-            setOnClickListener {
-                val currentIndex = filterOptions.indexOf(currentFilter)
-                val nextIndex = (currentIndex + 1) % filterOptions.size
-                currentFilter = filterOptions[nextIndex]
-                text = "Filtro: $currentFilter"
-                renderMedicines()
-                Toast.makeText(this@MainActivity, "Mostrando: $currentFilter", Toast.LENGTH_SHORT).show()
-            }
+            setOnClickListener { showRoutineFilterDialog(palette, baseTextSize) }
         }
 
         val addButton = Button(this).apply {
@@ -790,6 +783,7 @@ class MainActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER
                 elevation = dp(2).toFloat()
             }
+
             emptyCard.addView(TextView(this).apply {
                 text = if (allMedicines.isEmpty()) {
                     "No hay tratamientos registrados. Pulse en '+ Nuevo Tratamiento' para programar su primer recordatorio clínico."
@@ -1002,6 +996,77 @@ class MainActivity : AppCompatActivity() {
             params.bottomMargin = dp(14)
             list.addView(card, params)
         }
+    }
+
+    private fun showRoutineFilterDialog(palette: RecoMedPalette, baseTextSize: Float) {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(8))
+            background = createCardBackground(palette.surface, palette.border, 20)
+        }
+        content.addView(TextView(this).apply {
+            text = "Elegir tratamientos"
+            textSize = baseTextSize + 3f
+            setTextColor(palette.primaryText)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, 0, 0, dp(4))
+        })
+        content.addView(TextView(this).apply {
+            text = "Filtra la lista por rutina."
+            textSize = baseTextSize - 1f
+            setTextColor(palette.secondaryText)
+            setPadding(0, 0, 0, dp(14))
+        })
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(content)
+            .setNegativeButton("Cerrar", null)
+            .create()
+
+        filterOptions.forEach { option ->
+            val selected = option == currentFilter
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = dp(52)
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+                background = createCardBackground(
+                    if (selected) palette.accentSoft else palette.surface,
+                    if (selected) palette.accent else palette.border,
+                    14
+                )
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    currentFilter = option
+                    filterButton.text = "Filtro: $currentFilter"
+                    renderMedicines()
+                    Toast.makeText(this@MainActivity, "Mostrando: $currentFilter", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                }
+            }
+            row.addView(TextView(this).apply {
+                text = if (selected) "✓" else "○"
+                textSize = baseTextSize
+                setTextColor(if (selected) palette.accent else palette.secondaryText)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(dp(28), -2).apply {
+                rightMargin = dp(10)
+            })
+            row.addView(TextView(this).apply {
+                text = if (option == "Todos") "Todos los tratamientos" else option
+                textSize = baseTextSize - 1f
+                setTextColor(palette.primaryText)
+                setTypeface(null, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            content.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(7)
+            })
+        }
+
+        dialog.show()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
     }
 
     private fun showAddDialog() {

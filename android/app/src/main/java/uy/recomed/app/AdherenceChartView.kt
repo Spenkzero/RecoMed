@@ -99,6 +99,12 @@ internal class AdherenceChartView(
                     )
                 }
             }
+            val shouldDrawLabel = days.size <= 7 ||
+                index == 0 ||
+                index == days.lastIndex ||
+                index % 5 == 0
+            if (!shouldDrawLabel) return@forEachIndexed
+
             val label = if (days.size <= 7) {
                 day.date.format(DateTimeFormatter.ofPattern("EE", Locale.forLanguageTag("es")))
                     .replaceFirstChar { it.titlecase(Locale.forLanguageTag("es")) }
