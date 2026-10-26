@@ -7,8 +7,9 @@
     <application
         android:allowBackup="false"
         android:label="RecoMed"
-        android:icon="@drawable/ic_recomed"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
         android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
@@ -18,6 +19,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
         <receiver
             android:name=".ReminderReceiver"
             android:exported="false" />

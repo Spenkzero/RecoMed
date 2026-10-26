@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="Personalización">
+        <SwitchPreferenceCompat
+            app:key="dark_mode"
+            app:title="Modo Oscuro"
+            app:summary="Activar o desactivar el tema oscuro"
+            app:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Notificaciones de Recordatorios">
+        <SwitchPreferenceCompat
+            app:key="notifications_enabled"
+            app:title="Habilitar Alarmas"
+            app:summary="Recibir recordatorios de toma de medicamentos"
+            app:defaultValue="true" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

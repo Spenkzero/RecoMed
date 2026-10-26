@@ -18,6 +18,9 @@ object AlarmScheduler {
             putExtra("id", medicine.id)
             putExtra("name", medicine.name)
             putExtra("dose", medicine.dose)
+            putExtra("icon", medicine.icon)
+            putExtra("alarmTone", medicine.alarmTone)
+            putExtra("customToneUri", medicine.customToneUri)
         }
         val pending = PendingIntent.getBroadcast(
             context, medicine.id, intent,
@@ -32,7 +35,6 @@ object AlarmScheduler {
             if (!after(now)) add(Calendar.DAY_OF_YEAR, 1)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            // Fallback keeps reminders scheduled even before the user grants exact-alarm access.
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next.timeInMillis, pending)
         } else {
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next.timeInMillis, pending)

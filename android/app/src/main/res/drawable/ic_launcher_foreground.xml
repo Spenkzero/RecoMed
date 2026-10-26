@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group android:scaleX="0.78" android:scaleY="0.78" android:pivotX="54" android:pivotY="54">
+        <!-- Left Sound Wave -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#1E3A5F"
+            android:strokeWidth="5.5"
+            android:strokeLineCap="round"
+            android:pathData="M24,42 C18,36 18,28 24,22" />
+
+        <!-- Right Sound Wave -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#1E3A5F"
+            android:strokeWidth="5.5"
+            android:strokeLineCap="round"
+            android:pathData="M84,42 C90,36 90,28 84,22" />
+
+        <!-- Bell Outline -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#1E3A5F"
+            android:strokeWidth="6"
+            android:strokeLineJoin="round"
+            android:pathData="M54,18 C38,18 34,28 34,42 L26,76 C24,82 30,88 38,88 L70,88 C78,88 84,82 82,76 L74,42 C74,28 70,18 54,18 Z" />
+
+        <!-- Bell Top Knob -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#1E3A5F"
+            android:strokeWidth="6"
+            android:strokeLineCap="round"
+            android:pathData="M44,18 C44,12 64,12 64,18" />
+
+        <!-- Bell Bottom Clapper -->
+        <path
+            android:fillColor="#1E3A5F"
+            android:pathData="M48,89 C48,83 60,83 60,89 C60,95 48,95 48,89 Z" />
+
+        <!-- Heart Outline -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#E53935"
+            android:strokeWidth="6"
+            android:strokeLineJoin="round"
+            android:pathData="M54,73 C54,73 30,55 30,40 C30,30 39,24 46,30 C51,34 54,40 54,40 C54,40 57,34 62,30 C69,24 78,30 78,40 C78,55 54,73 54,73 Z" />
+
+        <!-- Pill Top Half (Dark Blue) -->
+        <path
+            android:fillColor="#1E3A5F"
+            android:pathData="M44,43 L54,53 C57,56 61,56 64,53 L66,51 C69,48 69,43 66,40 L56,30 C53,27 48,27 45,30 L43,32 C40,35 40,40 44,43 Z" />
+
+        <!-- Pill Bottom Half (Teal) -->
+        <path
+            android:fillColor="#2DD4BF"
+            android:pathData="M66,51 L64,53 C61,56 57,56 54,53 L44,43 C40,40 40,35 43,32 L45,30 C48,27 53,27 56,30 L66,40 C69,43 69,48 66,51 Z" />
+    </group>
+</vector>
