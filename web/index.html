@@ -6,11 +6,33 @@
   <meta name="theme-color" content="#176b5b">
   <meta name="description" content="RecoMed: recordatorios gratuitos y fáciles de usar para ayudarte a recordar los horarios de tus medicamentos.">
   <title>RecoMed — Recordar también es cuidarse</title>
+  <link rel="icon" type="image/png" href="images/recomed-logo.png">
+  <style>
+    /* Estilo del botón de descarga */
+    .btn-download {
+        display: inline-block;
+        margin-top: 20px;
+        padding: 14px 28px;
+        background-color: #006A60; /* Color primario médico */
+        color: #FFFFFF;
+        text-decoration: none;
+        font-weight: bold;
+        font-size: 1.05em;
+        border-radius: 25px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+        transition: background-color 0.3s ease, transform 0.2s ease;
+    }
+
+    .btn-download:hover {
+        background-color: #005048;
+        transform: translateY(-2px);
+    }
+  </style>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="#inicio" aria-label="RecoMed, inicio"><span class="brand-mark">+</span> RecoMed</a>
+    <a class="brand" href="#inicio" aria-label="RecoMed, inicio"><img class="brand-logo" src="images/recomed-logo.png" alt=""> RecoMed</a>
     <button class="menu-toggle" aria-label="Abrir menú" aria-expanded="false">☰</button>
     <nav class="nav" aria-label="Navegación principal">
       <a href="#como-funciona">Cómo funciona</a>
@@ -29,15 +51,17 @@
         <p class="hero-lead">Una idea simple para ayudar a las personas a recordar los horarios de sus medicamentos: gratuita, clara y pensada para el día a día.</p>
         <div class="hero-actions">
           <a class="button button-primary" href="#como-funciona">Descubrir RecoMed <span>↗</span></a>
+          <a class="btn-download" href="downloads/recomed-android.apk" download="recomed-android.apk">Descargar para Android (APK) ↓</a>
           <a class="text-link" href="#proposito">Conocer nuestra misión</a>
         </div>
+        <p class="download-note">Android 8.0 o posterior. Puede ser necesario autorizar la instalación del APK.</p>
         <div class="hero-note"><span class="check">✓</span><span>Una iniciativa educativa, solidaria y sin fines de lucro.</span></div>
       </div>
       <div class="hero-art" aria-label="Ilustración de una aplicación de recordatorios">
         <div class="sun"></div><div class="blob"></div>
         <div class="phone">
           <div class="phone-top"><span>9:41</span><span>● ● ▰</span></div>
-          <div class="app-mini-brand"><span class="brand-mark">+</span> RecoMed</div>
+          <div class="app-mini-brand"><img class="brand-logo" src="images/recomed-logo.png" alt=""> RecoMed</div>
           <p class="phone-greeting">¡Hola!</p><h2>Tu bienestar, primero.</h2>
           <div class="today-label">PRÓXIMO RECORDATORIO</div>
           <div class="reminder-card"><span class="pill-icon">✚</span><div><strong>Hora de tu medicamento</strong><small>Recordatorio personal</small></div><b>08:00</b></div>
@@ -50,6 +74,15 @@
     </section>
 
     <section class="ticker" aria-label="Principios del proyecto"><span>GRATUITA</span><i>✳</i><span>FÁCIL DE USAR</span><i>✳</i><span>HECHA PARA AYUDAR</span><i>✳</i><span>TECNOLOGÍA CON EMPATÍA</span></section>
+
+    <section class="free-section" aria-labelledby="free-title">
+      <div class="free-content">
+        <span class="free-icon" aria-hidden="true">✓</span>
+        <p class="eyebrow">Accesible para todos</p>
+        <h2 id="free-title">100% Gratuita y Sin Anuncios</h2>
+        <p>RecoMed es un proyecto completamente gratuito desarrollado para ofrecerte la mejor experiencia posible. Gracias al respaldo y alojamiento en <strong>GitHub</strong>, podemos mantener la plataforma activa y en constante actualización sin ningún costo de infraestructura. Esto nos permite garantizar una experiencia limpia, fluida y libre de publicidad molesta.</p>
+      </div>
+    </section>
 
     <section class="section how" id="como-funciona">
       <div class="section-intro"><p class="eyebrow">En el día a día</p><h2>Un pequeño recordatorio puede hacer la diferencia.</h2><p>RecoMed busca que organizar los horarios sea más sencillo. La app permite registrar medicamentos y configurar avisos en el celular.</p></div>
@@ -91,7 +124,7 @@
       <div class="foda-grid">
         <article class="foda-card strength"><span>F</span><h3>Fortalezas</h3><ul><li>Es gratuita y sin fines de lucro.</li><li>Ayuda a recordar horarios.</li><li>Busca ser fácil de usar y ayudar a quienes lo necesitan.</li></ul></article>
         <article class="foda-card opportunity"><span>O</span><h3>Oportunidades</h3><ul><li>Puede llegar a muchas personas por internet.</li><li>Puede utilizarse en celulares.</li><li>Posible apoyo de centros de salud o instituciones.</li><li>Posibilidad de agregar funciones en el futuro.</li></ul></article>
-        <article class="foda-card weakness"><span>D</span><h3>Debilidades</h3><ul><li>Se necesita un celular.</li><li>Algunas funciones podrían requerir internet.</li><li>Requiere mantenimiento y actualizaciones.</li><li>Al principio puede ser poco conocida.</li></ul></article>
+        <article class="foda-card weakness"><span>D</span><h3>Debilidades</h3><ul><li>Se necesita un celular y solo es compatible con android.</li><li>Algunas funciones podrían requerir internet.</li><li>Requiere mantenimiento y actualizaciones.</li><li>Al principio puede ser poco conocida.</li></ul></article>
         <article class="foda-card threat"><span>A</span><h3>Amenazas</h3><ul><li>Existen aplicaciones similares.</li><li>No todas las personas tienen celular o internet.</li><li>Problemas técnicos pueden impedir notificaciones.</li><li>Se puede olvidar activar o configurar avisos.</li></ul></article>
       </div>
     </section>
@@ -101,9 +134,9 @@
       <div class="team"><p class="eyebrow light">El equipo</p><div class="team-members"><span>YM</span><span>AT</span><span>SR</span></div><p>Yamandú Martinez <i>·</i> Alan Tabarez <i>·</i> Santiago Reyes</p></div>
     </section>
 
-    <section class="closing" id="contacto"><div class="closing-mark">+</div><p class="eyebrow">RecoMed</p><h2>Recordar. Cuidarse. Seguir adelante.</h2><p>Una iniciativa gratuita que busca poner la tecnología al servicio del bienestar.</p><a href="https://github.com/" class="button button-light" target="_blank" rel="noreferrer">Explorar el proyecto en GitHub ↗</a><small>El enlace de GitHub es genérico: reemplazalo por la dirección del repositorio una vez publicado.</small></section>
+    <section class="closing" id="contacto"><img class="closing-mark" src="images/recomed-logo.png" alt=""><p class="eyebrow">RecoMed</p><h2>Recordar. Cuidarse. Seguir adelante.</h2><p>Una iniciativa gratuita que busca poner la tecnología al servicio del bienestar.</p><a href="https://github.com/Spenkzero/RecoMed" class="button button-light" target="_blank" rel="noreferrer">Explorar el proyecto en GitHub ↗</a></section>
   </main>
-  <footer><a class="brand footer-brand" href="#inicio"><span class="brand-mark">+</span> RecoMed</a><p>Un proyecto educativo, gratuito y sin fines de lucro.</p><a href="privacy.html">Privacidad</a><span>© <span id="year"></span> RecoMed</span></footer>
+  <footer><a class="brand footer-brand" href="#inicio"><img class="brand-logo" src="images/recomed-logo.png" alt=""> RecoMed</a><p>Un proyecto educativo, gratuito y sin fines de lucro.</p><a href="privacy.html">Privacidad</a><span>© <span id="year"></span> RecoMed</span></footer>
   <script src="script.js"></script>
 </body>
 </html>

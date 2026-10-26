@@ -44,20 +44,16 @@ En Android 13 o posterior se solicita permiso para publicar notificaciones. En A
 
 ## Publicar en GitHub
 
-1. Crea un repositorio vacío en GitHub llamado `RecoMed`.
-2. Descomprime este paquete.
-3. Desde la carpeta raíz ejecuta:
+El código fuente está en [github.com/Spenkzero/RecoMed](https://github.com/Spenkzero/RecoMed) y la web publicada en [spenkzero.github.io/RecoMed](https://spenkzero.github.io/RecoMed/). Para publicar los cambios locales:
+
+1. Confirma los cambios que quieras publicar en la rama `main`.
+2. Sube los commits al repositorio existente:
 
    ```bash
-   git init
-   git add .
-   git commit -m "Initial RecoMed project"
-   git branch -M main
-   git remote add origin https://github.com/TU-USUARIO/RecoMed.git
-   git push -u origin main
+   git push origin main
    ```
 
-4. Para publicar la web con GitHub Pages: entra en **Settings → Pages**, elige `Deploy from a branch`, selecciona `main` y la carpeta `/web` si tu configuración permite elegirla. Si Pages solo permite la raíz o `/docs`, copia el contenido de `web/` a `/docs` o configura un workflow de Pages.
+3. La acción **Publish promotional website** despliega automáticamente el contenido de `web/` en GitHub Pages. En **Settings → Pages**, la fuente de publicación debe ser **GitHub Actions**. Revisa la pestaña **Actions** y espera a que la ejecución finalice correctamente antes de compartir la web.
 
 ## Base del contenido promocional
 
