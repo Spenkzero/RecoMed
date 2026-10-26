@@ -40,6 +40,52 @@ footer{display:flex;align-items:center;gap:25px;justify-content:space-between;pa
 @media(max-width:720px){.install-notes{grid-template-columns:1fr}}
 @media(max-width:520px){.hero-actions .button{width:100%}}
 
+.app-features{background:#fff}
+.feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.feature-card{padding:20px;border:1px solid var(--line);border-radius:20px;background:var(--cream)}
+.feature-preview{min-height:220px;padding:20px;background:#fff;border:1px solid var(--line);border-radius:16px;color:var(--ink)}
+.preview-heading,.preview-treatment,.preview-details,.preview-notification-top,.preview-setting-row{display:flex;align-items:center;justify-content:space-between}
+.preview-heading{font-family:Manrope,sans-serif;font-weight:800;margin-bottom:18px}
+.preview-action{display:grid;place-items:center;width:30px;height:30px;background:var(--mint);border-radius:10px;color:var(--green);font-size:1.2rem}
+.preview-treatment{justify-content:flex-start;gap:11px;padding:13px;background:#f4f8f4;border-radius:13px}
+.preview-pill{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--mint);color:var(--green);font-weight:800}
+.preview-treatment strong,.preview-treatment small{display:block}
+.preview-treatment strong{font-size:.87rem}
+.preview-treatment small,.preview-details span,.preview-notification-top small,.feature-preview>small{color:var(--muted);font-size:.75rem}
+.preview-details{padding:13px 3px 8px;font-size:.8rem}
+.preview-details strong{color:var(--green)}
+.preview-edit{color:var(--green);font-size:.76rem;font-weight:700;text-align:right}
+.notification-preview{background:#eaf5ed}
+.preview-notification-top{font-size:.75rem;color:var(--green);font-weight:700;margin-bottom:16px}
+.notification-preview>strong{font-size:.9rem}
+.notification-preview>p{margin:6px 0 17px;color:var(--muted);font-size:.78rem}
+.notification-actions{display:flex;gap:7px}
+.notification-actions span{flex:1;padding:8px 4px;background:#fff;border:1px solid var(--line);border-radius:9px;color:var(--green);font-size:.7rem;font-weight:700;text-align:center}
+.preview-period{padding:5px 9px;background:var(--mint);border-radius:20px;color:var(--green);font-family:'DM Sans',sans-serif;font-size:.7rem}
+.preview-date-range{display:block;margin:-10px 0 8px;color:var(--muted);font-size:.67rem}
+.preview-chart{height:91px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px;border-bottom:1px solid var(--line)}
+.preview-chart>span{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px}
+.preview-chart>span>i{display:block;width:21px;max-height:65px;min-height:8px;border-radius:6px 6px 2px 2px;background:#61a984}
+.preview-chart>span>i.bar-mixed{background:linear-gradient(to top,#61a984 55%,#e29b82 55%)}
+.preview-chart>span>small{font-size:.67rem;color:var(--muted)}
+.preview-chart-legend{display:flex;gap:15px;margin-top:11px}
+.preview-chart-legend span{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.68rem}
+.preview-chart-legend i{width:9px;height:9px;border-radius:3px;background:#61a984}
+.preview-chart-legend span+span i{background:#e29b82}
+.preview-swipe{display:block;margin-top:9px;text-align:center}
+.settings-preview>.feature-preview{background:#fff}
+.settings-preview>small{display:block;margin:0 0 7px}
+.preview-options{display:flex;gap:6px;margin-bottom:12px}
+.preview-options span{flex:1;padding:7px 2px;background:#f2f6f2;border-radius:8px;color:var(--muted);font-size:.67rem;text-align:center}
+.preview-options span:first-child{background:var(--green);color:#fff}
+.preview-text-size{padding:4px 0 10px;color:var(--green);font-weight:700;letter-spacing:4px}
+.preview-setting-row{padding:8px 0;border-top:1px solid var(--line);font-size:.73rem}
+.preview-setting-row strong{color:var(--green);font-size:.7rem}
+.feature-card h3{margin:18px 0 7px;font-family:Manrope,sans-serif;font-size:1.1rem}
+.feature-card>p{margin:0;color:var(--muted);font-size:.88rem}
+.feature-note{margin-top:24px}
+@media(max-width:720px){.feature-grid{grid-template-columns:1fr}.feature-card{padding:15px}.feature-preview{min-height:210px}}
+
 @media(max-width:720px){
   html{scroll-padding-top:76px}
   body{font-size:1rem}

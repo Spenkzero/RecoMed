@@ -2,7 +2,7 @@
 
 Página promocional estática, adaptable a celulares y computadoras. No necesita backend ni compilación. El workflow `.github/workflows/pages.yml` publica automáticamente la carpeta `web/` al hacer push a `main` (debes habilitar GitHub Actions/Pages en el repositorio).
 
-Edita `index.html` para cambiar el enlace genérico de GitHub por la URL real del repositorio.
+La página enlaza al repositorio oficial de RecoMed en GitHub. Las vistas de las funciones son ilustrativas; para usar la aplicación, descarga el APK desde el botón de la página.
 
 El logo compartido por todas las páginas está en `images/recomed-logo.png`; mantenlo dentro de `web/` para que también se muestre cuando el sitio esté publicado en otros dispositivos.
 
