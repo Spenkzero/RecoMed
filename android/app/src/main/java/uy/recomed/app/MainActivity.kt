@@ -361,7 +361,7 @@ class MainActivity : AppCompatActivity() {
         addLegendItem(legend, "Omitidas", palette.danger, baseTextSize - 3f, palette)
         summaryCard.addView(legend)
         content.addView(TextView(this).apply {
-            text = "En la vista de 30 días, desliza el gráfico para ver otros días."
+            text = "En la vista de 30 días, desliza el gráfico o arrastra la barra guía para recorrer las fechas."
             textSize = baseTextSize - 3f
             setTextColor(palette.secondaryText)
             gravity = Gravity.CENTER
@@ -455,7 +455,7 @@ class MainActivity : AppCompatActivity() {
         })
         trackingChart.contentDescription =
             "Gráfico de los últimos $trackingPeriodDays días: $taken dosis tomadas y $missed omitidas. " +
-                "Desliza horizontalmente para recorrer los días."
+                "Desliza horizontalmente o arrastra la barra guía para recorrer los días."
     }
 
     private fun buildSettingsPage(
