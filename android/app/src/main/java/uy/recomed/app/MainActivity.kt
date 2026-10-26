@@ -17,6 +17,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -129,7 +130,10 @@ class MainActivity : AppCompatActivity() {
                 val deltaX = event.x - swipeStartX
                 val deltaY = event.y - swipeStartY
                 if (kotlin.math.abs(deltaX) > dp(72) && kotlin.math.abs(deltaX) > kotlin.math.abs(deltaY) * 1.3f) {
-                    selectTab((selectedTab + if (deltaX < 0) 1 else -1).coerceIn(0, 2))
+                    selectTab(
+                        (selectedTab + if (deltaX < 0) 1 else -1).coerceIn(0, 2),
+                        animateTransition = true
+                    )
                 }
             }
         }
@@ -232,11 +236,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun selectTab(index: Int) {
-        if (index !in pages.indices) return
+    private fun selectTab(index: Int, animateTransition: Boolean = false) {
+        if (index !in pages.indices || index == selectedTab) return
+        val previousTab = selectedTab
         selectedTab = index
         pages.forEachIndexed { pageIndex, page ->
-            page.visibility = if (pageIndex == selectedTab) View.VISIBLE else View.GONE
+            page.animate().cancel()
+            if (pageIndex != selectedTab) {
+                page.visibility = View.GONE
+                page.translationX = 0f
+                page.alpha = 1f
+            }
+        }
+        val selectedPage = pages[selectedTab]
+        selectedPage.visibility = View.VISIBLE
+        if (animateTransition) {
+            selectedPage.translationX = if (selectedTab > previousTab) dp(24).toFloat() else -dp(24).toFloat()
+            selectedPage.alpha = 0.85f
+            selectedPage.animate()
+                .translationX(0f)
+                .alpha(1f)
+                .setDuration(180)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
         }
         getSharedPreferences("recomed_prefs", MODE_PRIVATE)
             .edit().putInt(KEY_SELECTED_TAB, selectedTab).apply()
