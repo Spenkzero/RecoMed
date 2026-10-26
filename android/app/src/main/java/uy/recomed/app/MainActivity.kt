@@ -108,8 +108,6 @@ class MainActivity : AppCompatActivity() {
             else -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         }
 
-        requestNotificationPermission()
-        showExactAlarmInfoIfNeeded()
         buildScreen()
         renderMedicines()
         if (selectedTab == 1) renderTracking()
@@ -590,6 +588,77 @@ class MainActivity : AppCompatActivity() {
         content.addView(chooseAudioButton, LinearLayout.LayoutParams(-1, -2).apply {
             topMargin = dp(6)
         })
+
+        content.addView(TextView(this).apply {
+            text = "Permisos de recordatorio"
+            textSize = baseTextSize + 1f
+            setTextColor(palette.primaryText)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, dp(20), 0, dp(8))
+        })
+        content.addView(TextView(this).apply {
+            text = "RecoMed solicita permisos solo cuando son necesarios. Puedes gestionar aquí las notificaciones y la precisión de las alarmas."
+            textSize = baseTextSize - 2f
+            setTextColor(palette.secondaryText)
+        })
+        val notificationSettingsButton = Button(this).apply {
+            text = "Gestionar notificaciones"
+            isAllCaps = false
+            textSize = baseTextSize - 2f
+            setTextColor(palette.primaryText)
+            background = createRoundedBackground(palette.accentSoft, 12)
+            addClickAnimation()
+            setOnClickListener {
+                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(
+                    Settings.EXTRA_APP_PACKAGE,
+                    packageName
+                )
+                try {
+                    startActivity(intent)
+                } catch (error: android.content.ActivityNotFoundException) {
+                    android.util.Log.e("RecoMed", "No se pudo abrir la configuración de notificaciones", error)
+                    Toast.makeText(this@MainActivity, "No se pudieron abrir los ajustes de notificaciones", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        content.addView(notificationSettingsButton, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(8)
+        })
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+            if (alarmManager.canScheduleExactAlarms()) {
+                content.addView(TextView(this).apply {
+                    text = "Alarmas precisas activadas."
+                    textSize = baseTextSize - 2f
+                    setTextColor(palette.accent)
+                    setPadding(0, dp(8), 0, 0)
+                })
+            } else {
+                val exactAlarmButton = Button(this).apply {
+                    text = "Configurar alarmas precisas"
+                    isAllCaps = false
+                    textSize = baseTextSize - 2f
+                    setTextColor(palette.primaryText)
+                    background = createRoundedBackground(palette.accentSoft, 12)
+                    addClickAnimation()
+                    setOnClickListener {
+                        val intent = Intent(
+                            Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                            Uri.parse("package:$packageName")
+                        )
+                        try {
+                            startActivity(intent)
+                        } catch (error: android.content.ActivityNotFoundException) {
+                            android.util.Log.e("RecoMed", "No se pudo abrir la configuración de alarmas precisas", error)
+                            Toast.makeText(this@MainActivity, "No se pudieron abrir los ajustes de alarmas", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+                content.addView(exactAlarmButton, LinearLayout.LayoutParams(-1, -2).apply {
+                    topMargin = dp(6)
+                })
+            }
+        }
         addSettingGroup(
             "Vibración",
             listOf(
@@ -1410,6 +1479,7 @@ class MainActivity : AppCompatActivity() {
                         MedicineStore.save(this, all)
                         AlarmScheduler.cancel(this, medicine.id)
                         if (medicine.enabled) AlarmScheduler.schedule(this, medicine)
+                        requestNotificationPermission()
                         renderMedicines()
                         val message = if (existingMedicine == null) {
                             "Tratamiento programado"
@@ -1425,27 +1495,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestNotificationPermission() {
+        val preferences = getSharedPreferences("recomed_prefs", MODE_PRIVATE)
         if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            !preferences.getBoolean("notification_permission_requested", false)) {
+            preferences.edit().putBoolean("notification_permission_requested", true).apply()
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 501)
-        }
-    }
-
-    private fun showExactAlarmInfoIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val manager = getSystemService(ALARM_SERVICE) as AlarmManager
-            if (!manager.canScheduleExactAlarms()) {
-                AlertDialog.Builder(this)
-                    .setTitle("Permitir recordatorios puntuales")
-                    .setMessage("Para máxima precisión en sus tomas, active «Alarmas y recordatorios» para RecoMed en los ajustes del sistema.")
-                    .setNegativeButton("Ahora no", null)
-                    .setPositiveButton("Abrir ajustes") { _, _ ->
-                        runCatching {
-                            startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                                Uri.parse("package:$packageName")))
-                        }
-                    }.show()
-            }
         }
     }
 }
