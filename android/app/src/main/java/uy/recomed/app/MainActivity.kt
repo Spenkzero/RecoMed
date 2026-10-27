@@ -413,7 +413,7 @@ class MainActivity : AppCompatActivity() {
             "intense" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
             "custom" -> customUri?.let(Uri::parse)
             "silent" -> null
-            else -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            else -> Uri.parse("android.resource://$packageName/${R.raw.recomed_alarm}")
         }
         if (soundUri == null) {
             Toast.makeText(this, "No hay un tono disponible para reproducir", Toast.LENGTH_LONG).show()
@@ -872,7 +872,7 @@ class MainActivity : AppCompatActivity() {
         addSettingGroup(
             "Sonido de los recordatorios",
             listOf(
-                "default" to "Alarma",
+                "default" to "Tono RecoMed",
                 "soft" to "Suave",
                 "intense" to "Intenso",
                 "custom" to "Personalizado",

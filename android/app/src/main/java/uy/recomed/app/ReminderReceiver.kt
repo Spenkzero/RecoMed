@@ -50,18 +50,18 @@ class ReminderReceiver : BroadcastReceiver() {
         val soundMode = preferences.getString("notification_sound", "default") ?: "default"
         val customToneUri = preferences.getString("notification_custom_uri", null).orEmpty()
         val vibrationMode = preferences.getString("notification_vibration", "standard") ?: "standard"
-        val channelId = "recomed_reminders_v5_${soundMode}_${vibrationMode}_${customToneUri.hashCode()}"
+        val channelId = "recomed_reminders_v6_${soundMode}_${vibrationMode}_${customToneUri.hashCode()}"
 
         val soundUri = when (soundMode) {
             "soft" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             "intense" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
             "custom" -> customToneUri.takeIf { it.isNotBlank() }?.let(Uri::parse)
             "silent" -> null
-            else -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            else -> Uri.parse("android.resource://${context.packageName}/${R.raw.recomed_alarm}")
         }
 
         val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
 
