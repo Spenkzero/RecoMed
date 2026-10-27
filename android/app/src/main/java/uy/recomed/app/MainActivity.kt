@@ -15,7 +15,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
-import android.media.Ringtone
+import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
@@ -77,7 +77,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var trackingPeriodButtons: List<Button>
     private var settingsAudioStatusView: TextView? = null
     private val soundPreviewHandler = Handler(Looper.getMainLooper())
-    private var previewRingtone: Ringtone? = null
+    private var previewPlayer: MediaPlayer? = null
     private var updateCheckInProgress = false
     private var updateDownloadReceiverRegistered = false
     private val updateDownloadReceiver = object : BroadcastReceiver() {
@@ -421,34 +421,66 @@ class MainActivity : AppCompatActivity() {
             return
         }
         try {
-            previewRingtone = RingtoneManager.getRingtone(this, soundUri)
-            val ringtone = previewRingtone
-            if (ringtone == null) {
-                Toast.makeText(this, "No se pudo reproducir este tono", Toast.LENGTH_LONG).show()
-                recreate()
-                return
-            }
-            ringtone.audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            val player = MediaPlayer()
+            previewPlayer = player
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
-            ringtone.play()
-            Toast.makeText(this, "Vista previa del tono", Toast.LENGTH_SHORT).show()
-            soundPreviewHandler.postDelayed({
-                stopSoundPreview()
-                if (!isFinishing && !isDestroyed) recreate()
-            }, SOUND_PREVIEW_DURATION_MS)
-        } catch (error: Exception) {
+            )
+            player.isLooping = true
+            player.setDataSource(this, soundUri)
+            player.setOnPreparedListener { preparedPlayer ->
+                if (previewPlayer !== preparedPlayer || isFinishing || isDestroyed) {
+                    preparedPlayer.release()
+                    return@setOnPreparedListener
+                }
+                preparedPlayer.start()
+                Toast.makeText(this, "Reproduciendo vista previa del tono", Toast.LENGTH_SHORT).show()
+                soundPreviewHandler.postDelayed({
+                    stopSoundPreview()
+                    if (!isFinishing && !isDestroyed) recreate()
+                }, SOUND_PREVIEW_DURATION_MS)
+            }
+            player.setOnErrorListener { failedPlayer, what, extra ->
+                android.util.Log.e(
+                    "RecoMed",
+                    "No se pudo reproducir la vista previa del tono (what=$what, extra=$extra)"
+                )
+                if (previewPlayer === failedPlayer) {
+                    stopSoundPreview()
+                    Toast.makeText(this, "No se pudo reproducir este tono", Toast.LENGTH_LONG).show()
+                    if (!isFinishing && !isDestroyed) recreate()
+                }
+                true
+            }
+            player.prepareAsync()
+        } catch (error: java.io.IOException) {
             android.util.Log.e("RecoMed", "No se pudo reproducir la vista previa del tono", error)
             Toast.makeText(this, "No se pudo reproducir este tono", Toast.LENGTH_LONG).show()
+            stopSoundPreview()
+            recreate()
+        } catch (error: IllegalArgumentException) {
+            android.util.Log.e("RecoMed", "No se pudo reproducir la vista previa del tono", error)
+            Toast.makeText(this, "No se pudo reproducir este tono", Toast.LENGTH_LONG).show()
+            stopSoundPreview()
+            recreate()
+        } catch (error: SecurityException) {
+            android.util.Log.e("RecoMed", "No se pudo acceder al tono para la vista previa", error)
+            Toast.makeText(this, "No se pudo acceder a este archivo de audio", Toast.LENGTH_LONG).show()
+            stopSoundPreview()
             recreate()
         }
     }
 
     private fun stopSoundPreview() {
         soundPreviewHandler.removeCallbacksAndMessages(null)
-        previewRingtone?.stop()
-        previewRingtone = null
+        previewPlayer?.let { player ->
+            if (player.isPlaying) player.stop()
+            player.release()
+        }
+        previewPlayer = null
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
