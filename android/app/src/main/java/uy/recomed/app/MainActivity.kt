@@ -2,17 +2,26 @@ package uy.recomed.app
 
 import android.Manifest
 import android.app.AlertDialog
+import android.app.DownloadManager
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.app.TimePickerDialog
 import android.app.AlarmManager
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
@@ -30,13 +39,18 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import java.io.File
 import java.time.LocalDate
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
     companion object {
         private const val STATE_SELECTED_TAB = "selected_tab"
         private const val KEY_SELECTED_TAB = "selected_tab"
+        private const val SOUND_PREVIEW_DURATION_MS = 4_000L
     }
 
     private lateinit var root: LinearLayout
@@ -62,6 +76,17 @@ class MainActivity : AppCompatActivity() {
     private var swipeStartedOnChart = false
     private lateinit var trackingPeriodButtons: List<Button>
     private var settingsAudioStatusView: TextView? = null
+    private val soundPreviewHandler = Handler(Looper.getMainLooper())
+    private var previewRingtone: Ringtone? = null
+    private var updateCheckInProgress = false
+    private var updateDownloadReceiverRegistered = false
+    private val updateDownloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
+            val completedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+            handleUpdateDownload(completedId)
+        }
+    }
 
     private val filterOptions = listOf("Todos", "Diario", "Mañana", "Tarde", "Noche", "Tratamiento 7 días")
 
@@ -84,7 +109,7 @@ class MainActivity : AppCompatActivity() {
                         .putString("notification_custom_uri", uri.toString())
                         .apply()
                     settingsAudioStatusView?.text = "Tono personalizado seleccionado"
-                    recreate()
+                    previewSoundAndRefresh("custom", uri.toString())
                 } catch (error: SecurityException) {
                     android.util.Log.e("RecoMed", "No se pudo guardar el permiso del tono seleccionado", error)
                     Toast.makeText(this, "No se pudo acceder al archivo de audio", Toast.LENGTH_LONG).show()
@@ -111,6 +136,14 @@ class MainActivity : AppCompatActivity() {
         buildScreen()
         renderMedicines()
         if (selectedTab == 1) renderTracking()
+        ContextCompat.registerReceiver(
+            this,
+            updateDownloadReceiver,
+            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        updateDownloadReceiverRegistered = true
+        checkForAppUpdate(manual = false)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -165,6 +198,257 @@ class MainActivity : AppCompatActivity() {
         buildScreen()
         renderMedicines()
         if (selectedTab == 1) renderTracking()
+        handleInstallPermissionReturn()
+        processPendingUpdateDownload()
+    }
+
+    override fun onDestroy() {
+        stopSoundPreview()
+        if (updateDownloadReceiverRegistered) {
+            unregisterReceiver(updateDownloadReceiver)
+            updateDownloadReceiverRegistered = false
+        }
+        super.onDestroy()
+    }
+
+    private fun checkForAppUpdate(manual: Boolean) {
+        if (updateCheckInProgress) return
+        val preferences = getSharedPreferences(AppUpdateManager.PREFS_NAME, MODE_PRIVATE)
+        if (preferences.getLong(AppUpdateManager.KEY_DOWNLOAD_ID, -1L) != -1L ||
+            !preferences.getString(AppUpdateManager.KEY_PENDING_APK, null).isNullOrBlank()
+        ) return
+        val now = System.currentTimeMillis()
+        val lastChecked = preferences.getLong(AppUpdateManager.KEY_LAST_CHECKED, 0L)
+        if (!manual && now - lastChecked < TimeUnit.HOURS.toMillis(12)) return
+        updateCheckInProgress = true
+        preferences.edit().putLong(AppUpdateManager.KEY_LAST_CHECKED, now).apply()
+        Thread {
+            try {
+                val update = AppUpdateManager.fetchAvailableUpdate(this)
+                runOnUiThread {
+                    updateCheckInProgress = false
+                    if (isFinishing || isDestroyed) {
+                        getSharedPreferences(AppUpdateManager.PREFS_NAME, MODE_PRIVATE).edit()
+                            .putLong(AppUpdateManager.KEY_LAST_CHECKED, 0L)
+                            .apply()
+                        return@runOnUiThread
+                    }
+                    if (update == null) {
+                        if (manual) {
+                            Toast.makeText(this, "Tienes la versión más reciente de RecoMed", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        showUpdateAvailable(update)
+                    }
+                }
+            } catch (error: Exception) {
+                android.util.Log.e("RecoMed", "No se pudo comprobar si hay actualizaciones", error)
+                runOnUiThread {
+                    updateCheckInProgress = false
+                    if (manual && !isFinishing && !isDestroyed) {
+                        Toast.makeText(
+                            this,
+                            "No se pudo comprobar la actualización. Revisa tu conexión e inténtalo otra vez.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun showUpdateAvailable(update: AppUpdate) {
+        if (isFinishing || isDestroyed) return
+        AlertDialog.Builder(this)
+            .setTitle("Actualización disponible")
+            .setMessage(
+                "RecoMed ${update.versionName} está disponible. ¿Quieres descargarla e instalarla ahora?"
+            )
+            .setNegativeButton("Más tarde", null)
+            .setPositiveButton("Actualizar") { _, _ -> downloadUpdate(update) }
+            .show()
+    }
+
+    private fun downloadUpdate(update: AppUpdate) {
+        try {
+            val downloadId = AppUpdateManager.enqueueDownload(this, update)
+            getSharedPreferences(AppUpdateManager.PREFS_NAME, MODE_PRIVATE).edit()
+                .putLong(AppUpdateManager.KEY_DOWNLOAD_ID, downloadId)
+                .putString(AppUpdateManager.KEY_PENDING_VERSION, update.versionName)
+                .remove(AppUpdateManager.KEY_PENDING_APK)
+                .apply()
+            Toast.makeText(this, "Descargando RecoMed ${update.versionName}", Toast.LENGTH_LONG).show()
+        } catch (error: Exception) {
+            android.util.Log.e("RecoMed", "No se pudo iniciar la descarga de la actualización", error)
+            Toast.makeText(this, "No se pudo iniciar la descarga de la actualización", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun processPendingUpdateDownload() {
+        val downloadId = getSharedPreferences(AppUpdateManager.PREFS_NAME, MODE_PRIVATE)
+            .getLong(AppUpdateManager.KEY_DOWNLOAD_ID, -1L)
+        if (downloadId != -1L) handleUpdateDownload(downloadId)
+
+        val preferences = getSharedPreferences(AppUpdateManager.PREFS_NAME, MODE_PRIVATE)
+        val apkPath = preferences.getString(AppUpdateManager.KEY_PENDING_APK, null)
+        if (!apkPath.isNullOrBlank() && !isUpdateReadyDialogShowing) {
+            val apkFile = File(apkPath)
+            if (apkFile.isFile && apkFile.length() > 0) showDownloadedUpdate(apkFile)
+        }
+    }
+
+    private var isUpdateReadyDialogShowing = false
+
+    private fun handleUpdateDownload(downloadId: Long) {
+        if (downloadId == -1L) return
+        val preferences = getSharedPreferences(AppUpdateManager.PREFS_NAME, MODE_PRIVATE)
+        if (preferences.getLong(AppUpdateManager.KEY_DOWNLOAD_ID, -1L) != downloadId) return
+        when (val status = AppUpdateManager.getDownloadStatus(this, downloadId)) {
+            AppDownloadStatus.Pending -> Unit
+            is AppDownloadStatus.Complete -> {
+                preferences.edit()
+                    .remove(AppUpdateManager.KEY_DOWNLOAD_ID)
+                    .putString(AppUpdateManager.KEY_PENDING_APK, status.file.absolutePath)
+                    .apply()
+                showDownloadedUpdate(status.file)
+            }
+            is AppDownloadStatus.Failed -> {
+                preferences.edit().remove(AppUpdateManager.KEY_DOWNLOAD_ID).apply()
+                android.util.Log.e("RecoMed", status.message)
+                Toast.makeText(this, status.message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun showDownloadedUpdate(apkFile: File) {
+        if (isFinishing || isDestroyed || isUpdateReadyDialogShowing) return
+        val version = getSharedPreferences(AppUpdateManager.PREFS_NAME, MODE_PRIVATE)
+            .getString(AppUpdateManager.KEY_PENDING_VERSION, "")
+            .orEmpty()
+        isUpdateReadyDialogShowing = true
+        AlertDialog.Builder(this)
+            .setTitle("Descarga completa")
+            .setMessage("RecoMed ${version.ifBlank { "nuevo" }} está listo para instalarse.")
+            .setNegativeButton("Después") { _, _ -> isUpdateReadyDialogShowing = false }
+            .setPositiveButton("Instalar") { _, _ ->
+                isUpdateReadyDialogShowing = false
+                requestUpdateInstallation(apkFile)
+            }
+            .setOnCancelListener { isUpdateReadyDialogShowing = false }
+            .show()
+    }
+
+    private fun requestUpdateInstallation(apkFile: File) {
+        if (!apkFile.isFile || apkFile.length() == 0L) {
+            Toast.makeText(this, "No se encontró el archivo de actualización", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!packageManager.canRequestPackageInstalls()) {
+            getSharedPreferences(AppUpdateManager.PREFS_NAME, MODE_PRIVATE).edit()
+                .putBoolean(AppUpdateManager.KEY_AWAITING_INSTALL_PERMISSION, true)
+                .apply()
+            AlertDialog.Builder(this)
+                .setTitle("Permiso para instalar")
+                .setMessage(
+                    "Android necesita que autorices a RecoMed para abrir el instalador. " +
+                        "La instalación final seguirá requiriendo tu confirmación."
+                )
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Abrir ajustes") { _, _ ->
+                    val settingsIntent = Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:$packageName")
+                    )
+                    try {
+                        startActivity(settingsIntent)
+                    } catch (error: android.content.ActivityNotFoundException) {
+                        android.util.Log.e("RecoMed", "No se pudo abrir el permiso de instalación", error)
+                        Toast.makeText(this, "No se pudieron abrir los ajustes de instalación", Toast.LENGTH_LONG).show()
+                    }
+                }
+                .show()
+            return
+        }
+        launchUpdateInstaller(apkFile)
+    }
+
+    private fun handleInstallPermissionReturn() {
+        val preferences = getSharedPreferences(AppUpdateManager.PREFS_NAME, MODE_PRIVATE)
+        if (!preferences.getBoolean(AppUpdateManager.KEY_AWAITING_INSTALL_PERMISSION, false) ||
+            !packageManager.canRequestPackageInstalls()
+        ) return
+        preferences.edit().putBoolean(AppUpdateManager.KEY_AWAITING_INSTALL_PERMISSION, false).apply()
+        val apkPath = preferences.getString(AppUpdateManager.KEY_PENDING_APK, null) ?: return
+        val apkFile = File(apkPath)
+        if (apkFile.isFile && apkFile.length() > 0) showDownloadedUpdate(apkFile)
+    }
+
+    private fun launchUpdateInstaller(apkFile: File) {
+        try {
+            val apkUri = FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                apkFile
+            )
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(installIntent)
+            getSharedPreferences(AppUpdateManager.PREFS_NAME, MODE_PRIVATE).edit()
+                .remove(AppUpdateManager.KEY_PENDING_APK)
+                .remove(AppUpdateManager.KEY_PENDING_VERSION)
+                .remove(AppUpdateManager.KEY_AWAITING_INSTALL_PERMISSION)
+                .apply()
+        } catch (error: Exception) {
+            android.util.Log.e("RecoMed", "No se pudo abrir el instalador de Android", error)
+            Toast.makeText(this, "No se pudo abrir el instalador de Android", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun previewSoundAndRefresh(sound: String, customUri: String? = null) {
+        stopSoundPreview()
+        val soundUri = when (sound) {
+            "soft" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            "intense" -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            "custom" -> customUri?.let(Uri::parse)
+            "silent" -> null
+            else -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        }
+        if (soundUri == null) {
+            Toast.makeText(this, "No hay un tono disponible para reproducir", Toast.LENGTH_LONG).show()
+            recreate()
+            return
+        }
+        try {
+            previewRingtone = RingtoneManager.getRingtone(this, soundUri)
+            val ringtone = previewRingtone
+            if (ringtone == null) {
+                Toast.makeText(this, "No se pudo reproducir este tono", Toast.LENGTH_LONG).show()
+                recreate()
+                return
+            }
+            ringtone.audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            ringtone.play()
+            Toast.makeText(this, "Vista previa del tono", Toast.LENGTH_SHORT).show()
+            soundPreviewHandler.postDelayed({
+                stopSoundPreview()
+                if (!isFinishing && !isDestroyed) recreate()
+            }, SOUND_PREVIEW_DURATION_MS)
+        } catch (error: Exception) {
+            android.util.Log.e("RecoMed", "No se pudo reproducir la vista previa del tono", error)
+            Toast.makeText(this, "No se pudo reproducir este tono", Toast.LENGTH_LONG).show()
+            recreate()
+        }
+    }
+
+    private fun stopSoundPreview() {
+        soundPreviewHandler.removeCallbacksAndMessages(null)
+        previewRingtone?.stop()
+        previewRingtone = null
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -568,7 +852,12 @@ class MainActivity : AppCompatActivity() {
                 settingsAudioPickerLauncher.launch(arrayOf("audio/*"))
             } else {
                 preferences.edit().putString("notification_sound", sound).apply()
-                recreate()
+                if (sound == "silent") {
+                    Toast.makeText(this, "Los recordatorios no tendrán sonido", Toast.LENGTH_SHORT).show()
+                    recreate()
+                } else {
+                    previewSoundAndRefresh(sound)
+                }
             }
         }
         val customUri = preferences.getString("notification_custom_uri", null)
@@ -679,6 +968,29 @@ class MainActivity : AppCompatActivity() {
             preferences.edit().putString("notification_vibration", vibration).apply()
             recreate()
         }
+        content.addView(TextView(this).apply {
+            text = "Actualizaciones"
+            textSize = baseTextSize + 1f
+            setTextColor(palette.primaryText)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, dp(22), 0, dp(8))
+        })
+        content.addView(TextView(this).apply {
+            text = "RecoMed comprobará si hay versiones nuevas. También puedes buscar una actualización ahora."
+            textSize = baseTextSize - 2f
+            setTextColor(palette.secondaryText)
+        })
+        content.addView(Button(this).apply {
+            text = "Buscar actualizaciones"
+            isAllCaps = false
+            textSize = baseTextSize - 1f
+            setTextColor(palette.primaryText)
+            background = createRoundedBackground(palette.accentSoft, 12)
+            addClickAnimation()
+            setOnClickListener { checkForAppUpdate(manual = true) }
+        }, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(8)
+        })
         return ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
             addView(content)

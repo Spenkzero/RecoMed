@@ -7,3 +7,5 @@ La página enlaza al repositorio oficial de RecoMed en GitHub. Las vistas de las
 El logo compartido por todas las páginas está en `images/recomed-logo.png`; mantenlo dentro de `web/` para que también se muestre cuando el sitio esté publicado en otros dispositivos.
 
 El botón de descarga sirve `downloads/recomed-android.apk`. Al publicar una versión nueva de la app, reemplaza ese archivo por el APK actualizado antes de desplegar la web. El APK de depuración incluido es para instalación manual y no para distribución en Google Play.
+
+La app consulta `version.json` para avisar de nuevas versiones. Al publicar una actualización, aumenta `versionCode` y `versionName` en `android/app/build.gradle.kts` y en `version.json`, y reemplaza el APK antes de desplegar el sitio. La app descarga el APK solo tras la confirmación del usuario y deja la instalación final en manos de Android.
