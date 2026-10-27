@@ -776,7 +776,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val logoImageView = ImageView(this).apply {
-            setImageResource(R.drawable.recomed_logo_transparent)
+            setImageResource(R.drawable.recomed_logo)
             adjustViewBounds = true
             layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).apply {
                 rightMargin = dp(12)
